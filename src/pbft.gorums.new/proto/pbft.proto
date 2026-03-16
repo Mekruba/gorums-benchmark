@@ -1,0 +1,85 @@
+
+edition = "2024";
+
+package pbft;
+
+option go_package = "proto/pbft";
+option features.field_presence = IMPLICIT;
+
+import "google/protobuf/empty.proto";
+import "gorums.proto";
+
+service PBFT {
+  // Client sends request to all replicas via quorum call.
+  // All replicas block until committed, then reply directly.
+  // Client accepts once f+1 matching replies are received.
+  rpc ClientRequest(Request) returns (Reply) {
+    option (gorums.quorumcall) = true;
+  }
+
+  // Primary multicasts pre-prepare to all backups.
+  rpc PrePrepare(PrePrepareMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+
+  // Each replica broadcasts prepare to all other replicas.
+  rpc Prepare(PrepareMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+
+  // Each replica broadcasts commit to all other replicas.
+  rpc Commit(CommitMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+}
+
+enum Operation {
+  READ = 0;
+  WRITE = 1;
+}
+
+// Request from client (Section 4.1)
+// <REQUEST, o, t, c>
+message Request {
+  Operation operation = 1; // o: operation to execute
+  int64 timestamp = 2;     // t: timestamp for exactly-once semantics
+  uint32 client_id = 3;    // c: client identifier
+}
+
+// Reply to client (Section 4.1)
+// <REPLY, v, t, c, i, r>
+message Reply {
+  uint32 view = 1;       // v: current view number
+  int64 timestamp = 2;   // t: timestamp from request
+  uint32 client_id = 3;  // c: client identifier
+  uint32 replica_id = 4; // i: replica number
+  string result = 5;     // r: result of executing the operation
+}
+
+// Pre-Prepare message (Section 4.2)
+// <<PRE-PREPARE, v, n, d>, m>
+message PrePrepareMsg {
+  uint32 view = 1;     // v: view number
+  uint64 sequence = 2; // n: sequence number
+  bytes digest = 3;    // d: digest of the request
+  Request request = 4; // m: the actual request (piggybacked)
+  int64 timestamp = 5;     // t: timestamp for exactly-once semantics
+}
+
+// Prepare message (Section 4.2)
+// <PREPARE, v, n, d, i>
+message PrepareMsg {
+  uint32 view = 1;       // v: view number
+  uint64 sequence = 2;   // n: sequence number
+  bytes digest = 3;      // d: digest of the request
+  uint32 replica_id = 4; // i: replica identifier
+}
+
+// Commit message (Section 4.2)
+// <COMMIT, v, n, d, i>
+message CommitMsg {
+  uint32 view = 1;       // v: view number
+  uint64 sequence = 2;   // n: sequence number
+  bytes digest = 3;      // d: digest of the request
+  uint32 replica_id = 4; // i: replica identifier
+}
