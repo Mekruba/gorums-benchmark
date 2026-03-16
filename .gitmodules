@@ -1,0 +1,3 @@
+[submodule "gorums"]
+	path = gorums
+	url = git@github.com:Mekruba/gorums-ata.git
