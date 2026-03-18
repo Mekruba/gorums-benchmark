@@ -2,7 +2,7 @@ module github.com/Mekruba/gorums-benchmark
 
 go 1.25.5
 
-replace github.com/relab/gorums => ../gorums
+replace github.com/relab/gorums => ../../gorums-ata
 
 require (
 	github.com/joho/godotenv v1.5.1 // indirect
