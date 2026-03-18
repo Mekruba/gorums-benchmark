@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/relab/gorums"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // NodeInfo describes a cluster member.
@@ -45,8 +47,7 @@ type Server struct {
 	sys   *gorums.System
 }
 
-// New creates a Server ready to be started. The peers slice uses index as ID,
-// matching the bench framework convention of srvAddresses[id].
+// New creates a Server ready to be started.
 func New(id uint32, addr string, peers map[int]string) *Server {
 	nodes := make([]NodeInfo, 0, len(peers))
 	for nodeID, p := range peers {
@@ -55,7 +56,7 @@ func New(id uint32, addr string, peers map[int]string) *Server {
 	return &Server{id: id, nodes: nodes}
 }
 
-// Start implements BenchmarkServer. local is ignored — always starts in-process.
+// Start implements BenchmarkServer.
 func (s *Server) Start(_ bool) {
 	peerMap := make(map[uint32]NodeAddr)
 	for _, n := range s.nodes {
@@ -73,7 +74,7 @@ func (s *Server) Start(_ bool) {
 
 	sys, err := gorums.NewSystem(addr,
 		gorums.WithConfig(s.id, peerList),
-		gorums.WithReceiveBufferSize(64),
+		gorums.WithReceiveBufferSize(128),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -114,7 +115,6 @@ func (s *Server) Stop() {
 }
 
 // StartServer starts a PBFT replica in-process and returns immediately.
-// Used by the bench framework's CreateServer.
 func StartServer(id uint32, nodes []NodeInfo) (*Server, error) {
 	s := &Server{id: id, nodes: nodes}
 	s.Start(true)
@@ -122,7 +122,6 @@ func StartServer(id uint32, nodes []NodeInfo) (*Server, error) {
 }
 
 // RunServer starts a replica and blocks until SIGINT/SIGTERM.
-// Used by the CLI binary.
 func RunServer(id uint32, nodes []NodeInfo, verbose bool) {
 	InitLogger(verbose)
 	s := &Server{id: id, nodes: nodes}
@@ -132,6 +131,40 @@ func RunServer(id uint32, nodes []NodeInfo, verbose bool) {
 	<-signals
 	slog.Info("shutting down", "node", id)
 	s.Stop()
+}
+
+// ── message log ───────────────────────────────────────────────────────────────
+
+// messageLog holds protocol state with its own mutex, independent of the
+// server mutex. This allows log operations to not block pending map access.
+type messageLog struct {
+	mu      sync.Mutex
+	entries map[uint64]*logEntry
+}
+
+func newMessageLog() *messageLog {
+	return &messageLog{
+		entries: make(map[uint64]*logEntry),
+	}
+}
+
+func (ml *messageLog) getOrCreate(seq uint64) *logEntry {
+	if e, ok := ml.entries[seq]; ok {
+		return e
+	}
+	e := &logEntry{seq: seq}
+	ml.entries[seq] = e
+	return e
+}
+
+func (ml *messageLog) delete(seq uint64) {
+	delete(ml.entries, seq)
+}
+
+func (ml *messageLog) reset() {
+	ml.mu.Lock()
+	defer ml.mu.Unlock()
+	ml.entries = make(map[uint64]*logEntry)
 }
 
 // ── PBFT protocol ─────────────────────────────────────────────────────────────
@@ -147,46 +180,87 @@ type logEntry struct {
 	executed     bool
 }
 
+type queuedRequest struct {
+	ts     int64
+	cfgCtx *gorums.ConfigContext
+}
+
 type PBFTServer struct {
 	id          uint32
 	view        uint32
 	sequence    uint64
 	primary     bool
 	clusterSize int
-	mu          sync.Mutex
 
-	log     map[uint64]*logEntry
-	pending map[int64]chan *pb.Reply
+	// pendingMu protects pending and sequence.
+	pendingMu sync.Mutex
+	pending   map[int64]chan *pb.Reply
+
+	// msgLog has its own mutex — log operations don't block pending access.
+	msgLog *messageLog
+
+	reqQueue  chan queuedRequest
+	received  atomic.Uint64
+	committed atomic.Uint64
 }
 
 func NewPBFTServer(id uint32, clusterSize int) *PBFTServer {
-	return &PBFTServer{
+	p := &PBFTServer{
 		id:          id,
 		primary:     id == 1,
 		clusterSize: clusterSize,
-		log:         make(map[uint64]*logEntry),
 		pending:     make(map[int64]chan *pb.Reply),
+		msgLog:      newMessageLog(),
+		reqQueue:    make(chan queuedRequest, 2000),
 	}
+	if p.primary {
+		go p.runPrimary()
+	}
+	return p
 }
 
-func (p *PBFTServer) getOrCreate(seq uint64) *logEntry {
-	if e, ok := p.log[seq]; ok {
-		return e
+func (p *PBFTServer) runPrimary() {
+	for req := range p.reqQueue {
+		p.pendingMu.Lock()
+		p.sequence++
+		seq := p.sequence
+		p.pendingMu.Unlock()
+
+		p.msgLog.mu.Lock()
+		e := p.msgLog.getOrCreate(seq)
+		e.ts = req.ts
+		p.msgLog.mu.Unlock()
+
+		err := pb.PrePrepare(req.cfgCtx, pb.PrePrepareMsg_builder{
+			View:      p.view,
+			Sequence:  seq,
+			Timestamp: req.ts,
+		}.Build())
+
+		if err != nil {
+			slog.Warn("PrePrepare send error", "node", p.id, "seq", seq, "err", err)
+		}
 	}
-	e := &logEntry{seq: seq}
-	p.log[seq] = e
-	return e
 }
 
 func (p *PBFTServer) deliver(e *logEntry) {
+	e.executed = true
+	p.committed.Add(1)
+	p.msgLog.delete(e.seq)
+
+	p.pendingMu.Lock()
 	ch, ok := p.pending[e.ts]
+	if ok {
+		delete(p.pending, e.ts)
+	}
+	p.pendingMu.Unlock()
+
 	if !ok {
 		return
 	}
-	e.executed = true
-	delete(p.pending, e.ts)
-	delete(p.log, e.seq)
-	slog.Info("committed", "node", p.id, "seq", e.seq)
+	slog.Info("committed", "node", p.id, "seq", e.seq,
+		"total_committed", p.committed.Load(),
+		"total_received", p.received.Load())
 	ch <- pb.Reply_builder{
 		View:      p.view,
 		ReplicaId: p.id,
@@ -198,44 +272,53 @@ func (p *PBFTServer) deliver(e *logEntry) {
 func (p *PBFTServer) ClientRequest(ctx gorums.ServerCtx, request *pb.Request) (*pb.Reply, error) {
 	ts := request.GetTimestamp()
 	slog.Debug("CLIENT-REQUEST", "node", p.id, "ts", ts)
-	ctx.Release()
 	cfgCtx := ctx.ConfigContext()
+	ctx.Release()
+
+	p.received.Add(1)
 
 	replyCh := make(chan *pb.Reply, 1)
-
-	p.mu.Lock()
+	p.pendingMu.Lock()
 	p.pending[ts] = replyCh
-	p.mu.Unlock()
+	p.pendingMu.Unlock()
 
-	var seq uint64
 	if p.primary {
-		p.mu.Lock()
-		p.sequence++
-		seq = p.sequence
-		e := p.getOrCreate(seq)
-		e.ts = ts
-		p.mu.Unlock()
-
-		slog.Debug("PRIMARY: sending PrePrepare", "node", p.id, "seq", seq)
-		_ = pb.PrePrepare(cfgCtx, pb.PrePrepareMsg_builder{
-			View:      p.view,
-			Sequence:  seq,
-			Timestamp: ts,
-		}.Build(), gorums.IgnoreErrors())
+		select {
+		case p.reqQueue <- queuedRequest{ts: ts, cfgCtx: cfgCtx}:
+		case <-ctx.Done():
+			p.pendingMu.Lock()
+			delete(p.pending, ts)
+			p.pendingMu.Unlock()
+			slog.Warn("ctx.Done while enqueuing",
+				"node", p.id,
+				"ts", ts,
+				"queue_len", len(p.reqQueue),
+				"queue_cap", cap(p.reqQueue),
+				"cause", context.Cause(ctx),
+			)
+			return nil, context.Canceled
+		}
 	}
 
 	select {
 	case reply := <-replyCh:
 		return reply, nil
 	case <-ctx.Done():
-		p.mu.Lock()
+		p.pendingMu.Lock()
 		delete(p.pending, ts)
-		if p.primary && seq != 0 {
-			if e, ok := p.log[seq]; ok && !e.committed {
-				delete(p.log, seq)
-			}
-		}
-		p.mu.Unlock()
+		p.pendingMu.Unlock()
+		slog.Warn("ctx.Done while waiting for reply",
+			"node", p.id,
+			"ts", ts,
+			"is_primary", p.primary,
+			"queue_len", len(p.reqQueue),
+			"pending_count", func() int {
+				p.pendingMu.Lock()
+				defer p.pendingMu.Unlock()
+				return len(p.pending)
+			}(),
+			"cause", context.Cause(ctx),
+		)
 		return nil, context.Canceled
 	}
 }
@@ -245,10 +328,11 @@ func (p *PBFTServer) PrePrepare(ctx gorums.ServerCtx, request *pb.PrePrepareMsg)
 	ts := request.GetTimestamp()
 	slog.Debug("PRE-PREPARE", "node", p.id, "seq", seq)
 
-	p.mu.Lock()
-	e := p.getOrCreate(seq)
+	p.msgLog.mu.Lock()
+	e := p.msgLog.getOrCreate(seq)
 	if e.sentPrepare {
-		p.mu.Unlock()
+		p.msgLog.mu.Unlock()
+		ctx.Release()
 		return
 	}
 	e.ts = ts
@@ -256,29 +340,32 @@ func (p *PBFTServer) PrePrepare(ctx gorums.ServerCtx, request *pb.PrePrepareMsg)
 	e.prepareCount++
 	if e.committed && !e.executed {
 		p.deliver(e)
-		p.mu.Unlock()
-		return
 	}
-	p.mu.Unlock()
+	p.msgLog.mu.Unlock()
 
 	cfgCtx := ctx.ConfigContext()
 	ctx.Release()
 	if cfgCtx == nil {
 		return
 	}
-	_ = pb.Prepare(cfgCtx, pb.PrepareMsg_builder{
+
+	err := pb.Prepare(cfgCtx, pb.PrepareMsg_builder{
 		View:      request.GetView(),
 		Sequence:  seq,
 		ReplicaId: p.id,
 	}.Build(), gorums.IgnoreErrors())
+
+	if err != nil {
+		slog.Warn("Prepare send error", "node", p.id, "seq", seq, "err", err)
+	}
 }
 
 func (p *PBFTServer) Prepare(ctx gorums.ServerCtx, request *pb.PrepareMsg) {
 	seq := request.GetSequence()
 	slog.Debug("PREPARE", "node", p.id, "seq", seq)
 
-	p.mu.Lock()
-	e := p.getOrCreate(seq)
+	p.msgLog.mu.Lock()
+	e := p.msgLog.getOrCreate(seq)
 	e.prepareCount++
 	f := (p.clusterSize - 1) / 3
 	shouldCommit := e.prepareCount >= 2*f && !e.sentCommit
@@ -286,7 +373,7 @@ func (p *PBFTServer) Prepare(ctx gorums.ServerCtx, request *pb.PrepareMsg) {
 		e.sentCommit = true
 		e.commitCount++
 	}
-	p.mu.Unlock()
+	p.msgLog.mu.Unlock()
 
 	if shouldCommit {
 		cfgCtx := ctx.ConfigContext()
@@ -294,30 +381,55 @@ func (p *PBFTServer) Prepare(ctx gorums.ServerCtx, request *pb.PrepareMsg) {
 		if cfgCtx == nil {
 			return
 		}
-		_ = pb.Commit(cfgCtx, pb.CommitMsg_builder{
+		err := pb.Commit(cfgCtx, pb.CommitMsg_builder{
 			View:      request.GetView(),
 			Sequence:  seq,
 			ReplicaId: p.id,
 		}.Build(), gorums.IgnoreErrors())
+
+		if err != nil {
+			slog.Warn("Commit send error", "node", p.id, "seq", seq, "err", err)
+		}
 	}
 }
 
 func (p *PBFTServer) Commit(ctx gorums.ServerCtx, request *pb.CommitMsg) {
 	seq := request.GetSequence()
 	slog.Debug("COMMIT", "node", p.id, "seq", seq)
+	ctx.Release()
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.msgLog.mu.Lock()
+	defer p.msgLog.mu.Unlock()
 
-	e := p.getOrCreate(seq)
+	e := p.msgLog.getOrCreate(seq)
 	e.commitCount++
 	f := (p.clusterSize - 1) / 3
 	if e.commitCount < 2*f+1 || e.executed {
 		return
 	}
 	e.committed = true
-	if e.ts == 0 {
-		return
+	if e.ts != 0 {
+		p.deliver(e)
 	}
-	p.deliver(e)
+}
+
+func (p *PBFTServer) Benchmark(ctx gorums.ServerCtx, _ *emptypb.Empty) {
+	ctx.Release()
+	slog.Info("resetting state", "node", p.id)
+
+	p.msgLog.reset()
+
+	p.pendingMu.Lock()
+	// Don't close channels — just abandon them. Goroutines waiting on them
+	// will eventually time out via their own ctx.
+	p.pending = make(map[int64]chan *pb.Reply)
+	p.sequence = 0
+	p.pendingMu.Unlock()
+
+	for len(p.reqQueue) > 0 {
+		<-p.reqQueue
+	}
+
+	p.received.Store(0)
+	p.committed.Store(0)
 }
