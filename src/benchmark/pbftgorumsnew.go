@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync/atomic"
+	"time"
 
 	pbftclient "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/client"
 	pbftserver "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
@@ -79,6 +80,8 @@ func (b *PbftGorumsNewBenchmark) StopBenchmark(_ *pbftclient.Client) []Result {
 
 func (b *PbftGorumsNewBenchmark) Run(c *pbftclient.Client, ctx context.Context, _ int) error {
 	req := pbftclient.NewRequest(b.counter.Add(1))
-	_, err := pbftclient.Request(c.Cfg, req, ctx)
+	reqCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := pbftclient.Request(c.Cfg, req, reqCtx)
 	return err
 }
