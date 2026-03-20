@@ -13,15 +13,24 @@ make build     # build the pbft binary
 ```
 
 ## Start Servers
-
+In a new terminal, move into pbft folder
+```bash
+cd pbft.gorums.new
+```
+Run start script for the servers
 ```bash
 bash start.sh
 ```
-
 This starts all 4 nodes. Add `--verbose` inside `start.sh` to enable debug logging.
 
-## Run Benchmark
+Servers can also be started induvidually 
+```bash
+go run . server --id <1-4>
+```
 
+
+## Run Benchmark
+From ./src
 ```bash
 BENCH=6 go run . --run 6 --throughput 1000 --steps 10 --dur 10
 ```
