@@ -70,7 +70,8 @@ func (s *Server) Start(_ bool) {
 
 	sys, err := gorums.NewSystem(addr,
 		gorums.WithConfig(s.id, peerList),
-		gorums.WithReceiveBufferSize(128),
+		gorums.WithReceiveBufferSize(1024),
+		gorums.WithSendBufferSize(512),
 		peerList,
 		gorums.WithDialOptions(grpc.WithTransportCredentials(insecure.NewCredentials())),
 	)
@@ -234,6 +235,7 @@ func (p *PBFTServer) runPrimary() {
 		}.Build()); err != nil {
 			slog.Warn("PrePrepare send error", "node", p.id, "seq", seq, "err", err)
 		}
+		slog.Info("preprepare sent", "node", p.id, "seq", seq, "ts", req.ts)
 	}
 }
 
@@ -267,7 +269,6 @@ func (p *PBFTServer) ClientRequest(ctx gorums.ServerCtx, request *pb.Request) (*
 	ts := request.GetTimestamp()
 	slog.Debug("CLIENT-REQUEST", "node", p.id, "ts", ts)
 	cfgCtx := ctx.ConfigContext()
-	ctx.Release()
 
 	p.received.Add(1)
 
@@ -292,6 +293,7 @@ func (p *PBFTServer) ClientRequest(ctx gorums.ServerCtx, request *pb.Request) (*
 		}
 	}
 
+	ctx.Release()
 	select {
 	case reply := <-replyCh:
 		return reply, nil
@@ -354,10 +356,10 @@ func (p *PBFTServer) PrePrepare(ctx gorums.ServerCtx, request *pb.PrePrepareMsg)
 	// }
 	p.msgLog.mu.Unlock()
 	cfgCtx := ctx.ConfigContext()
-	ctx.Release()
 	if cfgCtx == nil {
 		return
 	}
+	ctx.Release()
 	if err := pb.Prepare(cfgCtx, pb.PrepareMsg_builder{
 		View:      request.GetView(),
 		Sequence:  seq,
@@ -374,6 +376,8 @@ func (p *PBFTServer) Prepare(ctx gorums.ServerCtx, request *pb.PrepareMsg) {
 
 	p.msgLog.mu.Lock()
 	e := p.msgLog.getOrCreate(seq)
+	slog.Info("prepare received", "node", p.id, "seq", seq, "from", request.GetReplicaId())
+
 	e.prepareCount++
 	f := (p.clusterSize - 1) / 3
 	shouldCommit := e.prepareCount >= 2*f && !e.sentCommit
@@ -385,11 +389,11 @@ func (p *PBFTServer) Prepare(ctx gorums.ServerCtx, request *pb.PrepareMsg) {
 
 	if shouldCommit {
 		cfgCtx := ctx.ConfigContext()
-		ctx.Release()
 		if cfgCtx == nil {
-			slog.Error("No config found when sending Commit from node", p.id, "with seq ", e.seq)
+			slog.Error("No config found when sending Commit", "node", p.id, "seq", e.seq)
 			return
 		}
+		ctx.Release()
 		if err := pb.Commit(cfgCtx, pb.CommitMsg_builder{
 			View:      request.GetView(),
 			Sequence:  seq,
@@ -410,6 +414,7 @@ func (p *PBFTServer) Commit(ctx gorums.ServerCtx, request *pb.CommitMsg) {
 	defer p.msgLog.mu.Unlock()
 
 	e := p.msgLog.getOrCreate(seq)
+	slog.Info("commit received", "node", p.id, "seq", seq, "from", request.GetReplicaId(), "commitCount", e.commitCount)
 	e.commitCount++
 	f := (p.clusterSize - 1) / 3
 	if e.commitCount < 2*f+1 || e.executed {
