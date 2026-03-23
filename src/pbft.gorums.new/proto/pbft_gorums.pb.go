@@ -107,12 +107,18 @@ func Commit(ctx *ConfigContext, in *CommitMsg, opts ...gorums.CallOption) error 
 	return gorums.Multicast(ctx, in, "pbft.PBFT.Commit", opts...)
 }
 
+// Resets server state between benchmark steps.
+func Benchmark(ctx *ConfigContext, in *emptypb.Empty, opts ...gorums.CallOption) error {
+	return gorums.Multicast(ctx, in, "pbft.PBFT.Benchmark", opts...)
+}
+
 // PBFT is the server-side API for the PBFT Service
 type PBFTServer interface {
 	ClientRequest(ctx gorums.ServerCtx, request *Request) (response *Reply, err error)
 	PrePrepare(ctx gorums.ServerCtx, request *PrePrepareMsg)
 	Prepare(ctx gorums.ServerCtx, request *PrepareMsg)
 	Commit(ctx gorums.ServerCtx, request *CommitMsg)
+	Benchmark(ctx gorums.ServerCtx, request *emptypb.Empty)
 }
 
 func RegisterPBFTServer(srv *gorums.Server, impl PBFTServer) {
@@ -137,6 +143,11 @@ func RegisterPBFTServer(srv *gorums.Server, impl PBFTServer) {
 	srv.RegisterHandler("pbft.PBFT.Commit", func(ctx gorums.ServerCtx, in *gorums.Message) (*gorums.Message, error) {
 		req := gorums.AsProto[*CommitMsg](in)
 		impl.Commit(ctx, req)
+		return nil, nil
+	})
+	srv.RegisterHandler("pbft.PBFT.Benchmark", func(ctx gorums.ServerCtx, in *gorums.Message) (*gorums.Message, error) {
+		req := gorums.AsProto[*emptypb.Empty](in)
+		impl.Benchmark(ctx, req)
 		return nil, nil
 	})
 }
