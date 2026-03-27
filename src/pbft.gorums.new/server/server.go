@@ -95,13 +95,6 @@ func (s *Server) Start(_ bool) {
 		}
 	}()
 
-	_, err = sys.NewOutboundConfig(peerList,
-		gorums.WithDialOptions(grpc.WithTransportCredentials(insecure.NewCredentials())),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	slog.Info("ready", "node", s.id, "addr", addr)
 	time.Sleep(2 * time.Second)
 }

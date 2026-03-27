@@ -32,6 +32,9 @@ func getConfig() (srvs, clients ServerEntry) {
 	if benchType == "4" || benchType == "5" || benchType == "6" {
 		confType = "pbft"
 	}
+	if benchType == "7" {
+		confType = "simplex"
+	}
 	confPath := fmt.Sprintf("conf.%s.yaml", confType)
 	data, err := os.ReadFile(confPath)
 	if err != nil {
@@ -66,6 +69,7 @@ var mapping mappingType = map[int]string{
 	4: bench.PBFTWithGorums,
 	5: bench.PBFTWithoutGorums,
 	6: bench.PBFTGorumsNew,
+	7: bench.SimplexGorums,
 }
 
 func (m mappingType) String() string {
@@ -75,5 +79,7 @@ func (m mappingType) String() string {
 	ret += "\t3: " + m[3] + "\n"
 	ret += "\t4: " + m[4] + "\n"
 	ret += "\t5: " + m[5] + "\n"
+	ret += "\t6: " + m[6] + "\n"
+	ret += "\t7: " + m[7] + "\n"
 	return ret
 }

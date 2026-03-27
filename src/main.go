@@ -11,6 +11,7 @@ import (
 
 	bench "github.com/Mekruba/gorums-benchmark/benchmark"
 	pbftGorumsNew "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
+	simplexGorumsNew "github.com/Mekruba/gorums-benchmark/simplex.gorums/server"
 	"github.com/joho/godotenv"
 )
 
@@ -184,6 +185,10 @@ func runBenchmark(name string, clients ServerEntry, throughput, numClients, clie
 		}
 		options = append(options, bench.WithClients(clientsMap))
 	}
+	// For simplex, always use the 4-node local addresses in local mode.
+	if name == bench.SimplexGorums && local {
+		options = append(options, bench.WithSrvAddrs(bench.SimplexAddrs))
+	}
 	bench.RunBenchmark(name, options...)
 }
 
@@ -215,6 +220,9 @@ func runServer(benchType string, id int, srvAddrs map[int]Server, withLogger, me
 	switch benchType {
 	case bench.PBFTGorumsNew:
 		srv = pbftGorumsNew.New(uint32(id), srvAddresses[id], srvAddresses)
+	case bench.SimplexGorums:
+		simplexGorumsNew.InitKeys(len(srvAddrs))
+		srv = simplexGorumsNew.New(uint32(id), srvAddresses[id], srvAddresses)
 	}
 	if memprofile {
 		runtime.GC()
