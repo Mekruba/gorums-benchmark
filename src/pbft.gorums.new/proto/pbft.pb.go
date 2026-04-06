@@ -640,13 +640,14 @@ const file_pbft_proto_rawDesc = "" +
 	"replica_id\x18\x04 \x01(\rR\treplicaId* \n" +
 	"\tOperation\x12\b\n" +
 	"\x04READ\x10\x00\x12\t\n" +
-	"\x05WRITE\x10\x012\xee\x01\n" +
+	"\x05WRITE\x10\x012\xb1\x02\n" +
 	"\x04PBFT\x121\n" +
 	"\rClientRequest\x12\r.pbft.Request\x1a\v.pbft.Reply\"\x04\xa0\xb5\x18\x01\x12?\n" +
 	"\n" +
 	"PrePrepare\x12\x13.pbft.PrePrepareMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x129\n" +
 	"\aPrepare\x12\x10.pbft.PrepareMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x127\n" +
-	"\x06Commit\x12\x0f.pbft.CommitMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01B\x11Z\n" +
+	"\x06Commit\x12\x0f.pbft.CommitMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12A\n" +
+	"\tBenchmark\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01B\x11Z\n" +
 	"proto/pbft\x92\x03\x02\b\x02b\beditionsp\xe9\a"
 
 var file_pbft_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
@@ -667,12 +668,14 @@ var file_pbft_proto_depIdxs = []int32{
 	3, // 3: pbft.PBFT.PrePrepare:input_type -> pbft.PrePrepareMsg
 	4, // 4: pbft.PBFT.Prepare:input_type -> pbft.PrepareMsg
 	5, // 5: pbft.PBFT.Commit:input_type -> pbft.CommitMsg
-	2, // 6: pbft.PBFT.ClientRequest:output_type -> pbft.Reply
-	6, // 7: pbft.PBFT.PrePrepare:output_type -> google.protobuf.Empty
-	6, // 8: pbft.PBFT.Prepare:output_type -> google.protobuf.Empty
-	6, // 9: pbft.PBFT.Commit:output_type -> google.protobuf.Empty
-	6, // [6:10] is the sub-list for method output_type
-	2, // [2:6] is the sub-list for method input_type
+	6, // 6: pbft.PBFT.Benchmark:input_type -> google.protobuf.Empty
+	2, // 7: pbft.PBFT.ClientRequest:output_type -> pbft.Reply
+	6, // 8: pbft.PBFT.PrePrepare:output_type -> google.protobuf.Empty
+	6, // 9: pbft.PBFT.Prepare:output_type -> google.protobuf.Empty
+	6, // 10: pbft.PBFT.Commit:output_type -> google.protobuf.Empty
+	6, // 11: pbft.PBFT.Benchmark:output_type -> google.protobuf.Empty
+	7, // [7:12] is the sub-list for method output_type
+	2, // [2:7] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
 	2, // [2:2] is the sub-list for extension extendee
 	0, // [0:2] is the sub-list for field type_name

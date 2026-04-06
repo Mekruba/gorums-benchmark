@@ -1,0 +1,177 @@
+services:
+  srv1:
+    build: 
+      context: .
+      dockerfile: src/Dockerfile.Server
+    environment:
+      - ID=1
+      - SERVER=1
+      - CONF=${CONF}
+      - PRODUCTION=${PRODUCTION}
+      - BENCH=${BENCH}
+      - LOG=${LOG}
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      MasterLab:
+        ipv4_address: 10.0.0.5
+    deploy:
+      placement:
+        constraints: [node.hostname == node-1]
+
+  srv2:
+    build: 
+      context: .
+      dockerfile: src/Dockerfile.Server
+    environment:
+      - ID=2
+      - SERVER=1
+      - CONF=${CONF}
+      - PRODUCTION=${PRODUCTION}
+      - BENCH=${BENCH}
+      - LOG=${LOG}
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      MasterLab:
+        ipv4_address: 10.0.0.6
+    deploy:
+      placement:
+        constraints: [node.hostname == node-2]
+
+  srv3:
+    build: 
+      context: .
+      dockerfile: src/Dockerfile.Server
+    environment:
+      - ID=3
+      - SERVER=1
+      - CONF=${CONF}
+      - PRODUCTION=${PRODUCTION}
+      - BENCH=${BENCH}
+      - LOG=${LOG}
+    ports:
+      - "5002:5002"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      MasterLab:
+        ipv4_address: 10.0.0.7
+    deploy:
+      placement:
+        constraints: [node.hostname == node-3]
+
+  srv4:
+    build: 
+      context: .
+      dockerfile: src/Dockerfile.Server
+    environment:
+      - ID=4
+      - SERVER=1
+      - CONF=${CONF}
+      - PRODUCTION=${PRODUCTION}
+      - BENCH=${BENCH}
+      - LOG=${LOG}
+    ports:
+      - "5003:5003"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      MasterLab:
+        ipv4_address: 10.0.0.8
+    deploy:
+      placement:
+        constraints: [node.hostname == node-4]
+
+  srv5:
+    build: 
+      context: .
+      dockerfile: src/Dockerfile.Server
+    environment:
+      - ID=5
+      - SERVER=1
+      - CONF=${CONF}
+      - PRODUCTION=${PRODUCTION}
+      - BENCH=${BENCH}
+      - LOG=${LOG}
+    ports:
+      - "5004:5004"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      MasterLab:
+        ipv4_address: 10.0.0.9
+
+  srv6:
+    build: 
+      context: .
+      dockerfile: src/Dockerfile.Server
+    environment:
+      - ID=6
+      - SERVER=1
+      - CONF=${CONF}
+      - PRODUCTION=${PRODUCTION}
+      - BENCH=${BENCH}
+      - LOG=${LOG}
+    ports:
+      - "5005:5005"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      MasterLab:
+        ipv4_address: 10.0.0.10
+
+  srv7:
+    build: 
+      context: .
+      dockerfile: src/Dockerfile.Server
+    environment:
+      - ID=7
+      - SERVER=1
+      - CONF=${CONF}
+      - PRODUCTION=${PRODUCTION}
+      - BENCH=${BENCH}
+      - LOG=${LOG}
+    ports:
+      - "5006:5006"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      MasterLab:
+        ipv4_address: 10.0.0.11
+
+  client:
+    build: 
+      context: .
+      dockerfile: src/Dockerfile.Client
+    environment:
+      - SERVER=0
+      - CONF=${CONF}
+      - PRODUCTION=${PRODUCTION}
+      - BENCH=${BENCH}
+      - THROUGHPUT=${THROUGHPUT}
+      - STEPS=${STEPS}
+      - RUNS=${RUNS}
+      - DUR=${DUR}
+      - LOG=${LOG}
+    ports:
+      - "9080-9089:9080-9089"
+    volumes:
+      - ./logs:/app/logs
+      - ./csv:/app/csv
+    networks:
+      MasterLab:
+        ipv4_address: 10.0.0.3
+    depends_on:
+      - srv1
+      - srv2
+      - srv3
+      - srv4
+
+networks:
+  MasterLab:
+    external: true

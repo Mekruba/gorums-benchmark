@@ -5,50 +5,72 @@ import (
 	"fmt"
 	"log/slog"
 	"sync/atomic"
+	"time"
 
 	pbftclient "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/client"
 	pbftserver "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
 )
 
-var pbftNewNodes = []pbftserver.NodeInfo{
-	{ID: 1, Addr: "localhost:8080"},
-	{ID: 2, Addr: "localhost:8081"},
-	{ID: 3, Addr: "localhost:8082"},
-	{ID: 4, Addr: "localhost:8083"},
+// srvAddrsToNodes converts the index-keyed address slice used by the benchmark
+// framework (srvAddrs[id] = "host:port", index 0 is unused) into the NodeInfo
+// slice expected by the pbft client/server packages.
+func srvAddrsToNodes(srvAddrs []string) []pbftserver.NodeInfo {
+	nodes := make([]pbftserver.NodeInfo, 0, len(srvAddrs))
+	for i, addr := range srvAddrs {
+		if addr == "" {
+			continue
+		}
+		nodes = append(nodes, pbftserver.NodeInfo{ID: uint32(i), Addr: addr})
+	}
+	return nodes
 }
 
 // ── benchmark implementation ──────────────────────────────────────────────────
 
 type PbftGorumsNewBenchmark struct {
 	clients []*pbftclient.Client
+	nodes   []pbftserver.NodeInfo // derived from RunOptions.srvAddrs at Init time
 	counter atomic.Uint64
 }
 
-func (b *PbftGorumsNewBenchmark) CreateServer(addr string, _ []string) (*pbftserver.Server, func(), error) {
+func (b *PbftGorumsNewBenchmark) Init(opts RunOptions) {
+	b.nodes = srvAddrsToNodes(opts.srvAddrs)
+	if len(b.nodes) == 0 {
+		panic("pbftnew: no server addresses provided in RunOptions.srvAddrs")
+	}
+	b.clients = make([]*pbftclient.Client, 0, opts.numClients)
+	createClients(b, opts)
+}
+
+// CreateServer is called by the benchmark framework only in local mode
+// (opts.local == true). It starts a server for the given address.
+func (b *PbftGorumsNewBenchmark) CreateServer(addr string, srvAddrs []string) (*pbftserver.Server, func(), error) {
+	nodes := srvAddrsToNodes(srvAddrs)
 	var id uint32
-	for _, n := range pbftNewNodes {
+	for _, n := range nodes {
 		if n.Addr == addr {
 			id = n.ID
 			break
 		}
 	}
 	if id == 0 {
-		return nil, nil, fmt.Errorf("pbftnew: unknown addr %s", addr)
+		return nil, nil, fmt.Errorf("pbftnew: no node found for addr %s in srvAddrs", addr)
 	}
-	srv, err := pbftserver.StartServer(id, pbftNewNodes)
+	srv, err := pbftserver.StartServer(id, nodes)
 	if err != nil {
 		return nil, nil, err
 	}
 	return srv, func() { srv.Stop() }, nil
 }
 
-func (b *PbftGorumsNewBenchmark) Init(opts RunOptions) {
-	b.clients = make([]*pbftclient.Client, 0, opts.numClients)
-	createClients(b, opts)
-}
-
-func (b *PbftGorumsNewBenchmark) AddClient(_ int, _ string, _ []string, _ *slog.Logger) {
-	c, err := pbftclient.NewClient(pbftNewNodes)
+// AddClient is called once per client by createClients. The srvAddrs slice
+// carries the server addresses so each client connects to the right cluster.
+func (b *PbftGorumsNewBenchmark) AddClient(_ int, _ string, srvAddrs []string, _ *slog.Logger) {
+	nodes := srvAddrsToNodes(srvAddrs)
+	if len(nodes) == 0 {
+		panic("pbftnew: AddClient called with empty srvAddrs")
+	}
+	c, err := pbftclient.NewClient(nodes)
 	if err != nil {
 		panic(fmt.Sprintf("pbftnew: failed to create client: %v", err))
 	}
@@ -77,8 +99,10 @@ func (b *PbftGorumsNewBenchmark) StopBenchmark(_ *pbftclient.Client) []Result {
 	return nil
 }
 
-func (b *PbftGorumsNewBenchmark) Run(c *pbftclient.Client, ctx context.Context, _ int) error {
+func (b *PbftGorumsNewBenchmark) Run(c *pbftclient.Client, _ context.Context, _ int) error {
 	req := pbftclient.NewRequest(b.counter.Add(1))
-	_, err := pbftclient.Request(c.Cfg, req, ctx)
+	reqCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	_, err := pbftclient.Request(c.Cfg, req, reqCtx)
 	return err
 }
