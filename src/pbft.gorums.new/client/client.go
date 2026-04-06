@@ -13,30 +13,29 @@ import (
 	"github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
 )
 
-// Client wraps a gorums manager and configuration.
+// Client wraps a gorums configuration.
 type Client struct {
-	Mgr *gorums.Manager
 	Cfg gorums.Configuration
 }
 
 func (c *Client) Close() {
-	c.Mgr.Close()
+	c.Cfg.Close()
 }
 
 // NewClient creates a client connected to the given nodes.
 func NewClient(nodes []server.NodeInfo) (*Client, error) {
-	mgr := pb.NewManager(gorums.WithDialOptions(
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	))
 	peerMap := make(map[uint32]server.NodeAddr)
 	for _, n := range nodes {
 		peerMap[n.ID] = server.NodeAddr{Addr_: n.Addr}
 	}
-	cfg, err := gorums.NewConfiguration(mgr, gorums.WithNodes(peerMap))
+	cfg, err := gorums.NewConfig(
+		gorums.WithNodes(peerMap),
+		gorums.WithDialOptions(grpc.WithTransportCredentials(insecure.NewCredentials())),
+	)
 	if err != nil {
 		return nil, err
 	}
-	return &Client{Mgr: mgr, Cfg: cfg}, nil
+	return &Client{Cfg: cfg}, nil
 }
 
 // RunClient sends a single request and logs the reply. Used by the CLI.
