@@ -175,3 +175,8 @@ services:
 networks:
   MasterLab:
     external: true
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.0.0/16
+        - gateway: 10.0.0.1
