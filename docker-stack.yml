@@ -1,0 +1,76 @@
+version: "3.9"
+
+services:
+  srv1:
+    image: my-bench-server:latest
+    environment:
+      - ID=1
+      - SERVER=1
+      - BENCH=${BENCH}
+      - CONF=pbft
+    networks:
+      - MasterLab
+    deploy:
+      placement:
+        constraints: [node.hostname == node-1]
+
+  srv2:
+    image: my-bench-server:latest
+    environment:
+      - ID=2
+      - SERVER=1
+      - BENCH=${BENCH}
+      - CONF=pbft
+    networks:
+      - MasterLab
+    deploy:
+      placement:
+        constraints: [node.hostname == node-2]
+
+  srv3:
+    image: my-bench-server:latest
+    environment:
+      - ID=3
+      - SERVER=1
+      - BENCH=${BENCH}
+      - CONF=pbft
+    networks:
+      - MasterLab
+    deploy:
+      placement:
+        constraints: [node.hostname == node-3]
+
+  srv4:
+    image: my-bench-server:latest
+    environment:
+      - ID=4
+      - SERVER=1
+      - BENCH=${BENCH}
+      - CONF=pbft
+    networks:
+      - MasterLab
+    deploy:
+      placement:
+        constraints: [node.hostname == node-4]
+
+  client:
+    image: my-bench-client:latest
+    environment:
+      - SERVER=0
+      - BENCH=${BENCH}
+      - CONF=pbft
+      - THROUGHPUT=${THROUGHPUT}
+      - STEPS=${STEPS}
+      - DUR=${DUR}
+    networks:
+      - MasterLab
+    volumes:
+      - ./logs:/app/logs
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+
+networks:
+  MasterLab:
+    driver: overlay
+    attachable: true

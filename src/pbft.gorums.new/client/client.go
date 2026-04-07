@@ -13,30 +13,29 @@ import (
 	"github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
 )
 
-// Client wraps a gorums manager and configuration.
+// Client wraps a gorums configuration.
 type Client struct {
-	Mgr *gorums.Manager
 	Cfg gorums.Configuration
 }
 
 func (c *Client) Close() {
-	c.Mgr.Close()
+	c.Cfg.Close()
 }
 
 // NewClient creates a client connected to the given nodes.
 func NewClient(nodes []server.NodeInfo) (*Client, error) {
-	mgr := pb.NewManager(gorums.WithDialOptions(
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	))
 	peerMap := make(map[uint32]server.NodeAddr)
 	for _, n := range nodes {
 		peerMap[n.ID] = server.NodeAddr{Addr_: n.Addr}
 	}
-	cfg, err := gorums.NewConfiguration(mgr, gorums.WithNodes(peerMap))
+	cfg, err := gorums.NewConfig(
+		gorums.WithNodes(peerMap),
+		gorums.WithDialOptions(grpc.WithTransportCredentials(insecure.NewCredentials())),
+	)
 	if err != nil {
 		return nil, err
 	}
-	return &Client{Mgr: mgr, Cfg: cfg}, nil
+	return &Client{Cfg: cfg}, nil
 }
 
 // RunClient sends a single request and logs the reply. Used by the CLI.
@@ -77,21 +76,30 @@ func NewRequest(counter uint64) *pb.Request {
 func Request(cfg gorums.Configuration, req *pb.Request, ctx context.Context) (*pb.Reply, error) {
 	f := (cfg.Size() - 1) / 3
 	cfgCtx := cfg.Context(ctx)
-	return collectFPlus1Replies(pb.ClientRequest(cfgCtx, req), f)
+	reply, err := collectFPlus1Replies(pb.ClientRequest(cfgCtx, req), f)
+	if err != nil {
+		log.Printf("request failed: ts=%d err=%v", req.GetTimestamp(), err)
+	}
+	return reply, err
 }
 
 func collectFPlus1Replies(responses *gorums.Responses[*pb.Reply], f int) (*pb.Reply, error) {
 	needed := f + 1
 	counts := make(map[string]int)
+	var best *pb.Reply
 	for resp := range responses.Seq() {
 		if resp.Err != nil {
+			log.Printf("node %d error: %v", resp.NodeID, resp.Err)
 			continue
 		}
 		result := resp.Value.GetResult()
 		counts[result]++
-		if counts[result] >= needed {
-			return resp.Value, nil
+		if counts[result] == needed {
+			best = resp.Value
 		}
+	}
+	if best != nil {
+		return best, nil
 	}
 	return nil, gorums.ErrIncomplete
 }

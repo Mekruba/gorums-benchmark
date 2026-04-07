@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1
+FROM golang:alpine
+
+WORKDIR /app
+
+# 1. Copy the gorums dependency first into a folder named 'gorums'
+# This ensures it exists at /app/gorums
+COPY gorums ./gorums
+
+# 2. Go into the src directory where the main code is
+# This ensures relative paths like ../gorums work correctly
+WORKDIR /app/src
+
+# 3. Copy the mod files and download dependencies
+COPY src/go.mod src/go.sum ./
+RUN go mod download
+
+# 4. Copy the rest of the source code
+COPY src/. .
+
+# 5. Build the binary
+RUN CGO_ENABLED=0 GOOS=linux go build -o /client
+
+# Make sure this matches the '-o' path above
+ENTRYPOINT ["/client"]
+
+ENV PRODUCTION=1
+ENV SERVER=0
+
+CMD [ "/client" ]
