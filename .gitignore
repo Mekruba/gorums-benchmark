@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-csv
-=======
 # User added:
 node_modules
 node_modules/
@@ -39,4 +36,3 @@ src/pbft.gorums.new/pbft
 
 # Go workspace file
 go.work
->>>>>>> master
