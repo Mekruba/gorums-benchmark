@@ -246,9 +246,23 @@ type BenchmarkServer interface {
 func runServer(benchType string, id int, srvAddrs map[int]Server, withLogger, memprofile, local bool) {
 	fmt.Println("Running server:", benchType)
 	srvAddresses := make(map[int]string, len(srvAddrs))
+
+	fmt.Println("--------")
+	fmt.Printf("Configuring Node ID: %d\n", id)
+	fmt.Println("Server Address Map:")
+
 	for _, srv := range srvAddrs {
-		srvAddresses[srv.ID] = fmt.Sprintf("%s:%s", srv.Addr, srv.Port)
+		addrStr := fmt.Sprintf("%s:%s", srv.Addr, srv.Port)
+		srvAddresses[srv.ID] = addrStr
+
+		// Highlight the current node's own listening address vs peers
+		label := "Peer"
+		if srv.ID == id {
+			label = "SELF (Listen Addr)"
+		}
+		fmt.Printf("  [%s] ID: %d --> %s\n", label, srv.ID, addrStr)
 	}
+	fmt.Println("--------")
 	var srv BenchmarkServer
 	switch benchType {
 	case bench.PBFTGorumsNew:

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -15,7 +14,6 @@ import (
 	"github.com/relab/gorums"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // NodeInfo describes a cluster member.
@@ -101,6 +99,7 @@ func (s *Server) Start(_ bool) {
 		peerList,
 		dialOpts,
 	)
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -151,101 +150,4 @@ func RunServer(id uint32, nodes []NodeInfo, verbose bool) {
 
 	slog.Info("shutting down", "node", id)
 	s.Stop()
-}
-
-// ── PBFT primary loop and RPC handlers (kept in server.go for locality) ───────
-
-func (p *PBFTServer) runPrimary() {
-	var sequence uint64
-	for req := range p.reqQueue {
-		sequence++
-		seq := sequence
-
-		p.msgLog.Update(seq, func(e *logEntry) {
-			e.ts = req.ts
-			e.sentPrepare = true
-			e.prepareCount = 1
-		})
-
-		if err := pb.PrePrepare(req.cfgCtx, pb.PrePrepareMsg_builder{
-			View:      p.view,
-			Sequence:  seq,
-			Timestamp: req.ts,
-		}.Build()); err != nil {
-			slog.Warn("PrePrepare send error", "node", p.id, "seq", seq, "err", err)
-		}
-
-		slog.Info("preprepare sent", "node", p.id, "seq", seq, "ts", req.ts)
-	}
-}
-
-func (p *PBFTServer) ClientRequest(ctx gorums.ServerCtx, request *pb.Request) (*pb.Reply, error) {
-	ts := request.GetTimestamp()
-	slog.Debug("CLIENT-REQUEST", "node", p.id, "ts", ts)
-	cfgCtx := ctx.ConfigContext()
-
-	p.received.Add(1)
-
-	replyCh := make(chan *pb.Reply, 1)
-	p.pendingMu.Lock()
-	p.pending[ts] = replyCh
-	p.pendingMu.Unlock()
-
-	if p.primary {
-		select {
-		case p.reqQueue <- queuedRequest{ts: ts, cfgCtx: cfgCtx}:
-		case <-ctx.Done():
-			p.cleanupPending(ts)
-			return nil, context.Canceled
-		}
-	}
-
-	ctx.Release()
-
-	select {
-	case reply := <-replyCh:
-		return reply, nil
-	case <-ctx.Done():
-		select {
-		case reply := <-replyCh:
-			return reply, nil
-		default:
-		}
-		p.cleanupPending(ts)
-		if e := p.msgLog.FindByTs(ts); e != nil {
-			slog.Warn("ctx.Done while waiting for reply",
-				"node", p.id, "ts", ts, "seq", e.seq,
-				"prepares", e.prepareCount, "commits", e.commitCount,
-				"committed", e.committed, "executed", e.executed,
-			)
-		} else {
-			slog.Warn("ctx.Done — no log entry found for timestamp", "node", p.id, "ts", ts)
-		}
-		return nil, context.Canceled
-	}
-}
-
-func (p *PBFTServer) cleanupPending(ts int64) {
-	p.pendingMu.Lock()
-	delete(p.pending, ts)
-	p.pendingMu.Unlock()
-}
-
-// Benchmark resets server state between benchmark steps.
-func (p *PBFTServer) Benchmark(ctx gorums.ServerCtx, _ *emptypb.Empty) {
-	ctx.Release()
-	slog.Info("resetting state", "node", p.id)
-
-	p.msgLog.Reset()
-
-	p.pendingMu.Lock()
-	p.pending = make(map[int64]chan<- *pb.Reply)
-	p.pendingMu.Unlock()
-
-	for len(p.reqQueue) > 0 {
-		<-p.reqQueue
-	}
-
-	p.received.Store(0)
-	p.committed.Store(0)
 }
