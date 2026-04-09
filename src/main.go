@@ -268,7 +268,7 @@ func runServer(benchType string, id int, srvAddrs map[int]Server, withLogger, me
 	case bench.PBFTGorumsNew:
 		srv = pbftGorumsNew.New(uint32(id), srvAddresses)
 	case bench.PaxosATA:
-		addrs := make([]string, len(srvAddrs))
+		addrs := make([]string, len(srvAddrs)+1)
 		for _, s := range srvAddrs {
 			addrs[s.ID] = fmt.Sprintf("%s:%s", s.Addr, s.Port)
 		}
