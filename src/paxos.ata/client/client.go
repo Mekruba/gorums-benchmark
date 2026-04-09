@@ -79,6 +79,7 @@ func (c *Client) propose(value string) error {
 	c.nextInstance += c.stride
 	c.mu.Unlock()
 
+	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
 			time.Sleep(time.Duration(attempt*attempt) * 2 * time.Millisecond)
@@ -87,11 +88,11 @@ func (c *Client) propose(value string) error {
 			delete(c.preparedInstances, instance)
 			c.mu.Unlock()
 		}
-		if err := c.tryPropose(instance, value); err == nil {
+		if lastErr = c.tryPropose(instance, value); lastErr == nil {
 			return nil
 		}
 	}
-	return fmt.Errorf("paxosata: gave up after %d attempts on instance %d", maxRetries, instance)
+	return fmt.Errorf("paxosata: gave up after %d attempts on instance %d: %w", maxRetries, instance, lastErr)
 }
 
 func (c *Client) tryPropose(instance uint32, value string) error {
