@@ -4,7 +4,13 @@ services:
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
-    network_mode: "host"
+    networks:
+      - MasterLab
+    ports:
+      - target: 5000
+        published: 5000
+        protocol: tcp
+        mode: host
     environment:
       - ID=1
       - SERVER=1
@@ -23,7 +29,13 @@ services:
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
-    network_mode: "host"
+    networks:
+      - MasterLab
+    ports:
+      - target: 5000
+        published: 5000
+        protocol: tcp
+        mode: host
     environment:
       - ID=2
       - SERVER=1
@@ -42,7 +54,13 @@ services:
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
-    network_mode: "host"
+    networks:
+      - MasterLab
+    ports:
+      - target: 5000
+        published: 5000
+        protocol: tcp
+        mode: host
     environment:
       - ID=3
       - SERVER=1
@@ -61,7 +79,13 @@ services:
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
-    network_mode: "host"
+    networks:
+      - MasterLab
+    ports:
+      - target: 5000
+        published: 5000
+        protocol: tcp
+        mode: host
     environment:
       - ID=4
       - SERVER=1
@@ -80,7 +104,13 @@ services:
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
-    network_mode: "host"
+    networks:
+      - MasterLab
+    ports:
+      - target: 5000
+        published: 5000
+        protocol: tcp
+        mode: host
     environment:
       - ID=5
       - SERVER=1
@@ -96,7 +126,13 @@ services:
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
-    network_mode: "host"
+    networks:
+      - MasterLab
+    ports:
+      - target: 5000
+        published: 5000
+        protocol: tcp
+        mode: host
     environment:
       - ID=6
       - SERVER=1
@@ -112,7 +148,13 @@ services:
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
-    network_mode: "host"
+    networks:
+      - MasterLab
+    ports:
+      - target: 5000
+        published: 5000
+        protocol: tcp
+        mode: host
     environment:
       - ID=7
       - SERVER=1
@@ -128,7 +170,8 @@ services:
     build: 
       context: .
       dockerfile: src/Dockerfile.Client
-    network_mode: "host"
+    networks:
+      - MasterLab
     environment:
       - SERVER=0
       - CONF=${CONF}
@@ -147,6 +190,5 @@ services:
         constraints: [node.hostname == node-1]
 
 networks:
-  default:
-    driver: overlay
-    attachable: true
+  MasterLab:
+    external: true
