@@ -93,9 +93,9 @@ func (s *PaxosServer) getInstance(instance uint32) *instanceState {
 
 // Prepare handles Phase 1a: Proposer asks acceptors to promise.
 func (s *PaxosServer) Prepare(ctx gorums.ServerCtx, req *pb.PrepareRequest) (*pb.PromiseResponse, error) {
-	state := s.getInstance(req.GetInstance())
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	state := s.getInstance(req.GetInstance())
 	if req.GetProposalNum() > state.promisedProposalNum {
 		state.promisedProposalNum = req.GetProposalNum()
 		return pb.PromiseResponse_builder{
@@ -115,9 +115,9 @@ func (s *PaxosServer) Prepare(ctx gorums.ServerCtx, req *pb.PrepareRequest) (*pb
 
 // Accept handles Phase 2a: Proposer asks acceptors to accept a value.
 func (s *PaxosServer) Accept(ctx gorums.ServerCtx, req *pb.AcceptRequest) (*pb.AcceptedResponse, error) {
-	state := s.getInstance(req.GetInstance())
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	state := s.getInstance(req.GetInstance())
 	if req.GetProposalNum() >= state.promisedProposalNum {
 		state.promisedProposalNum = req.GetProposalNum()
 		state.acceptedProposalNum = req.GetProposalNum()
@@ -139,9 +139,9 @@ func (s *PaxosServer) Accept(ctx gorums.ServerCtx, req *pb.AcceptRequest) (*pb.A
 
 // Learn handles Phase 3: Proposer notifies learners of chosen value.
 func (s *PaxosServer) Learn(ctx gorums.ServerCtx, req *pb.LearnRequest) (*pb.LearnResponse, error) {
-	state := s.getInstance(req.GetInstance())
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	state := s.getInstance(req.GetInstance())
 	if state.learnedValue == "" {
 		state.learnedValue = req.GetValue()
 	}
