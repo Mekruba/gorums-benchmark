@@ -55,7 +55,11 @@ func New(addr string, srvAddrs []string) *PaxosServer {
 
 // Start begins serving in a background goroutine.
 func (s *PaxosServer) Start(_ bool) {
-	lis, err := net.Listen("tcp", s.addr)
+	_, port, err := net.SplitHostPort(s.addr)
+	if err != nil {
+		panic("paxosata: invalid addr: " + err.Error())
+	}
+	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		panic("paxosata: listen: " + err.Error())
 	}
