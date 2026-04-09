@@ -83,8 +83,6 @@ func (s *PaxosServer) Reset() {
 }
 
 func (s *PaxosServer) getInstance(instance uint32) *instanceState {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if st, ok := s.instances[instance]; ok {
 		return st
 	}
