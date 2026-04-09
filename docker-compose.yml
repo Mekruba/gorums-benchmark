@@ -13,7 +13,7 @@ services:
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
-      - ./logs:/app/logs
+      - /home/ubuntu/gorums-benchmark/logs:/app/logs
     deploy:
       placement:
         constraints: [node.hostname == node-1]
@@ -32,7 +32,7 @@ services:
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
-      - ./logs:/app/logs
+      - /home/ubuntu/gorums-benchmark/logs:/app/logs
     deploy:
       placement:
         constraints: [node.hostname == node-2]
@@ -51,7 +51,7 @@ services:
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
-      - ./logs:/app/logs
+      - /home/ubuntu/gorums-benchmark/logs:/app/logs
     deploy:
       placement:
         constraints: [node.hostname == node-3]
@@ -70,7 +70,7 @@ services:
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
-      - ./logs:/app/logs
+      - /home/ubuntu/gorums-benchmark/logs:/app/logs
     deploy:
       placement:
         constraints: [node.hostname == node-4]
@@ -89,7 +89,7 @@ services:
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
-      - ./logs:/app/logs
+      - /home/ubuntu/gorums-benchmark/logs:/app/logs
 
   srv6:
     image: my-bench-server:latest
@@ -105,7 +105,7 @@ services:
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
-      - ./logs:/app/logs
+      - /home/ubuntu/gorums-benchmark/logs:/app/logs
 
   srv7:
     image: my-bench-server:latest
@@ -121,7 +121,7 @@ services:
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
-      - ./logs:/app/logs
+      - /home/ubuntu/gorums-benchmark/logs:/app/logs
 
   client:
     image: my-bench-client:latest
@@ -140,5 +140,13 @@ services:
       - DUR=${DUR}
       - LOG=${LOG}
     volumes:
-      - ./logs:/app/logs
-      - ./csv:/app/src/csv
+      - /home/ubuntu/gorums-benchmark/logs:/app/logs
+      - /home/ubuntu/gorums-benchmark/csv:/app/src/csv
+    deploy:
+      placement:
+        constraints: [node.hostname == node-1]
+
+networks:
+  default:
+    external: true
+    name: MasterLab
