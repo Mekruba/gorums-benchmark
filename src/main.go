@@ -201,9 +201,12 @@ func runBenchmark(name string, clients ServerEntry, throughput, numClients, clie
 			fmt.Fprintln(os.Stderr, "Error: srvAddrs cannot be nil when not running locally")
 			os.Exit(1)
 		}
-		srvAddresses = make([]string, len(srvAddrs)+1)
-		for _, srv := range srvAddrs {
-			srvAddresses[srv.ID] = fmt.Sprintf("%s:%s", srv.Addr, srv.Port)
+		srvAddresses = make([]string, 0, len(srvAddrs))
+		for i := 1; i <= len(srvAddrs); i++ {
+			srv, ok := srvAddrs[i]
+			if ok {
+				srvAddresses = append(srvAddresses, fmt.Sprintf("%s:%s", srv.Addr, srv.Port))
+			}
 		}
 		options = append(options, bench.WithSrvAddrs(srvAddresses))
 	}
