@@ -122,6 +122,8 @@ services:
     deploy:
       placement:
         constraints: [node.hostname == node-1]
+      restart_policy:
+        condition: none
 
 networks:
   MasterLab:
