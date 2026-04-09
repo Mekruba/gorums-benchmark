@@ -11,6 +11,10 @@ servers:
       id: 3
       addr: "192.168.1.77"
       port: "5000"
+  - 4:
+      id: 4
+      addr: "192.168.1.43"
+      port: "5000"
 clients:
   - 1:
       id: 1
