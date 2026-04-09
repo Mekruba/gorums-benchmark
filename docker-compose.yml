@@ -1,5 +1,6 @@
 services:
   srv1:
+    image: my-bench-server:latest
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
@@ -18,6 +19,7 @@ services:
         constraints: [node.hostname == node-1]
 
   srv2:
+    image: my-bench-server:latest
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
@@ -36,6 +38,7 @@ services:
         constraints: [node.hostname == node-2]
 
   srv3:
+    image: my-bench-server:latest
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
@@ -54,6 +57,7 @@ services:
         constraints: [node.hostname == node-3]
 
   srv4:
+    image: my-bench-server:latest
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
@@ -72,6 +76,7 @@ services:
         constraints: [node.hostname == node-4]
 
   srv5:
+    image: my-bench-server:latest
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
@@ -87,6 +92,7 @@ services:
       - ./logs:/app/logs
 
   srv6:
+    image: my-bench-server:latest
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
@@ -102,6 +108,7 @@ services:
       - ./logs:/app/logs
 
   srv7:
+    image: my-bench-server:latest
     build: 
       context: .
       dockerfile: src/Dockerfile.Server
@@ -117,6 +124,7 @@ services:
       - ./logs:/app/logs
 
   client:
+    image: my-bench-client:latest
     build: 
       context: .
       dockerfile: src/Dockerfile.Client
