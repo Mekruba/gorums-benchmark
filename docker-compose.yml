@@ -145,3 +145,8 @@ services:
     deploy:
       placement:
         constraints: [node.hostname == node-1]
+
+networks:
+  default:
+    driver: overlay
+    attachable: true
