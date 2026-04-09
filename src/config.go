@@ -31,8 +31,6 @@ func getConfig() (srvs, clients ServerEntry) {
 	benchType := os.Getenv("BENCH")
 	if benchType == "4" || benchType == "5" || benchType == "6" {
 		confType = "pbft"
-	} else if benchType == "7" {
-		confType = "local"
 	}
 	confPath := fmt.Sprintf("conf.%s.yaml", confType)
 	data, err := os.ReadFile(confPath)
