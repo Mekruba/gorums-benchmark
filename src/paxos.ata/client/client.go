@@ -18,7 +18,6 @@ type Client struct {
 	mu                  sync.Mutex
 	id                  uint32
 	cfg                 pb.Configuration
-	mgr                 *pb.Manager
 	proposalNum         uint32
 	preparedInstances   map[uint32]bool
 	freshInstances      map[uint32]bool
@@ -29,12 +28,12 @@ type Client struct {
 
 // New creates a proposer client connecting to srvAddresses.
 func New(id int, _ string, srvAddresses []string, _ int, _ *slog.Logger) *Client {
-	mgr := pb.NewManager(
+	cfg, err := pb.NewConfig(
+		gorums.WithNodeList(srvAddresses),
 		gorums.WithDialOptions(
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		),
 	)
-	cfg, err := pb.NewConfiguration(mgr, gorums.WithNodeList(srvAddresses))
 	if err != nil {
 		panic(fmt.Sprintf("paxosata client: config error: %v", err))
 	}
@@ -42,7 +41,6 @@ func New(id int, _ string, srvAddresses []string, _ int, _ *slog.Logger) *Client
 	return &Client{
 		id:                uid,
 		cfg:               cfg,
-		mgr:               mgr,
 		proposalNum:       uid * 100000,
 		preparedInstances: make(map[uint32]bool),
 		freshInstances:    make(map[uint32]bool),
@@ -64,7 +62,7 @@ func (c *Client) SetStride(startInstance, stride uint32) {
 
 // Stop closes the client's connection.
 func (c *Client) Stop() {
-	c.mgr.Close()
+	c.cfg.Close() //nolint:errcheck
 }
 
 // Write proposes value and returns when consensus is reached.

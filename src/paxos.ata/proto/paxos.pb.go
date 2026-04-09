@@ -2,7 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v5.27.2
-// source: paxos/proto/paxos.proto
+// source: paxos.proto
+
+//go:build !protoopaque
 
 package proto
 
@@ -23,17 +25,17 @@ const (
 
 // PrepareRequest is Phase 1a message from proposer to acceptors.
 type PrepareRequest struct {
-	state                  protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_Instance    uint32                 `protobuf:"varint,1,opt,name=instance"`
-	xxx_hidden_ProposalNum uint32                 `protobuf:"varint,2,opt,name=proposal_num,json=proposalNum"`
-	xxx_hidden_ProposerId  uint32                 `protobuf:"varint,3,opt,name=proposer_id,json=proposerId"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"hybrid.v1"`
+	Instance      uint32                 `protobuf:"varint,1,opt,name=instance" json:"instance,omitempty"`                          // Instance/slot number for Multi-Paxos
+	ProposalNum   uint32                 `protobuf:"varint,2,opt,name=proposal_num,json=proposalNum" json:"proposal_num,omitempty"` // Proposal number (n)
+	ProposerId    uint32                 `protobuf:"varint,3,opt,name=proposer_id,json=proposerId" json:"proposer_id,omitempty"`    // ID of the proposer
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PrepareRequest) Reset() {
 	*x = PrepareRequest{}
-	mi := &file_paxos_proto_paxos_proto_msgTypes[0]
+	mi := &file_paxos_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45,7 +47,7 @@ func (x *PrepareRequest) String() string {
 func (*PrepareRequest) ProtoMessage() {}
 
 func (x *PrepareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paxos_proto_paxos_proto_msgTypes[0]
+	mi := &file_paxos_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -58,35 +60,35 @@ func (x *PrepareRequest) ProtoReflect() protoreflect.Message {
 
 func (x *PrepareRequest) GetInstance() uint32 {
 	if x != nil {
-		return x.xxx_hidden_Instance
+		return x.Instance
 	}
 	return 0
 }
 
 func (x *PrepareRequest) GetProposalNum() uint32 {
 	if x != nil {
-		return x.xxx_hidden_ProposalNum
+		return x.ProposalNum
 	}
 	return 0
 }
 
 func (x *PrepareRequest) GetProposerId() uint32 {
 	if x != nil {
-		return x.xxx_hidden_ProposerId
+		return x.ProposerId
 	}
 	return 0
 }
 
 func (x *PrepareRequest) SetInstance(v uint32) {
-	x.xxx_hidden_Instance = v
+	x.Instance = v
 }
 
 func (x *PrepareRequest) SetProposalNum(v uint32) {
-	x.xxx_hidden_ProposalNum = v
+	x.ProposalNum = v
 }
 
 func (x *PrepareRequest) SetProposerId(v uint32) {
-	x.xxx_hidden_ProposerId = v
+	x.ProposerId = v
 }
 
 type PrepareRequest_builder struct {
@@ -101,27 +103,27 @@ func (b0 PrepareRequest_builder) Build() *PrepareRequest {
 	m0 := &PrepareRequest{}
 	b, x := &b0, m0
 	_, _ = b, x
-	x.xxx_hidden_Instance = b.Instance
-	x.xxx_hidden_ProposalNum = b.ProposalNum
-	x.xxx_hidden_ProposerId = b.ProposerId
+	x.Instance = b.Instance
+	x.ProposalNum = b.ProposalNum
+	x.ProposerId = b.ProposerId
 	return m0
 }
 
 // PromiseResponse is Phase 1b message from acceptor to proposer.
 type PromiseResponse struct {
-	state                          protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_AcceptorId          uint32                 `protobuf:"varint,1,opt,name=acceptor_id,json=acceptorId"`
-	xxx_hidden_Instance            uint32                 `protobuf:"varint,2,opt,name=instance"`
-	xxx_hidden_Promised            bool                   `protobuf:"varint,3,opt,name=promised"`
-	xxx_hidden_AcceptedProposalNum uint32                 `protobuf:"varint,4,opt,name=accepted_proposal_num,json=acceptedProposalNum"`
-	xxx_hidden_AcceptedValue       string                 `protobuf:"bytes,5,opt,name=accepted_value,json=acceptedValue"`
-	unknownFields                  protoimpl.UnknownFields
-	sizeCache                      protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"hybrid.v1"`
+	AcceptorId          uint32                 `protobuf:"varint,1,opt,name=acceptor_id,json=acceptorId" json:"acceptor_id,omitempty"`                              // ID of responding acceptor
+	Instance            uint32                 `protobuf:"varint,2,opt,name=instance" json:"instance,omitempty"`                                                    // Instance/slot number
+	Promised            bool                   `protobuf:"varint,3,opt,name=promised" json:"promised,omitempty"`                                                    // Whether acceptor promises
+	AcceptedProposalNum uint32                 `protobuf:"varint,4,opt,name=accepted_proposal_num,json=acceptedProposalNum" json:"accepted_proposal_num,omitempty"` // Highest accepted proposal number (if any)
+	AcceptedValue       string                 `protobuf:"bytes,5,opt,name=accepted_value,json=acceptedValue" json:"accepted_value,omitempty"`                      // Value of highest accepted proposal (if any)
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *PromiseResponse) Reset() {
 	*x = PromiseResponse{}
-	mi := &file_paxos_proto_paxos_proto_msgTypes[1]
+	mi := &file_paxos_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -133,7 +135,7 @@ func (x *PromiseResponse) String() string {
 func (*PromiseResponse) ProtoMessage() {}
 
 func (x *PromiseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paxos_proto_paxos_proto_msgTypes[1]
+	mi := &file_paxos_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -146,57 +148,57 @@ func (x *PromiseResponse) ProtoReflect() protoreflect.Message {
 
 func (x *PromiseResponse) GetAcceptorId() uint32 {
 	if x != nil {
-		return x.xxx_hidden_AcceptorId
+		return x.AcceptorId
 	}
 	return 0
 }
 
 func (x *PromiseResponse) GetInstance() uint32 {
 	if x != nil {
-		return x.xxx_hidden_Instance
+		return x.Instance
 	}
 	return 0
 }
 
 func (x *PromiseResponse) GetPromised() bool {
 	if x != nil {
-		return x.xxx_hidden_Promised
+		return x.Promised
 	}
 	return false
 }
 
 func (x *PromiseResponse) GetAcceptedProposalNum() uint32 {
 	if x != nil {
-		return x.xxx_hidden_AcceptedProposalNum
+		return x.AcceptedProposalNum
 	}
 	return 0
 }
 
 func (x *PromiseResponse) GetAcceptedValue() string {
 	if x != nil {
-		return x.xxx_hidden_AcceptedValue
+		return x.AcceptedValue
 	}
 	return ""
 }
 
 func (x *PromiseResponse) SetAcceptorId(v uint32) {
-	x.xxx_hidden_AcceptorId = v
+	x.AcceptorId = v
 }
 
 func (x *PromiseResponse) SetInstance(v uint32) {
-	x.xxx_hidden_Instance = v
+	x.Instance = v
 }
 
 func (x *PromiseResponse) SetPromised(v bool) {
-	x.xxx_hidden_Promised = v
+	x.Promised = v
 }
 
 func (x *PromiseResponse) SetAcceptedProposalNum(v uint32) {
-	x.xxx_hidden_AcceptedProposalNum = v
+	x.AcceptedProposalNum = v
 }
 
 func (x *PromiseResponse) SetAcceptedValue(v string) {
-	x.xxx_hidden_AcceptedValue = v
+	x.AcceptedValue = v
 }
 
 type PromiseResponse_builder struct {
@@ -213,28 +215,28 @@ func (b0 PromiseResponse_builder) Build() *PromiseResponse {
 	m0 := &PromiseResponse{}
 	b, x := &b0, m0
 	_, _ = b, x
-	x.xxx_hidden_AcceptorId = b.AcceptorId
-	x.xxx_hidden_Instance = b.Instance
-	x.xxx_hidden_Promised = b.Promised
-	x.xxx_hidden_AcceptedProposalNum = b.AcceptedProposalNum
-	x.xxx_hidden_AcceptedValue = b.AcceptedValue
+	x.AcceptorId = b.AcceptorId
+	x.Instance = b.Instance
+	x.Promised = b.Promised
+	x.AcceptedProposalNum = b.AcceptedProposalNum
+	x.AcceptedValue = b.AcceptedValue
 	return m0
 }
 
 // AcceptRequest is Phase 2a message from proposer to acceptors.
 type AcceptRequest struct {
-	state                  protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_Instance    uint32                 `protobuf:"varint,1,opt,name=instance"`
-	xxx_hidden_ProposalNum uint32                 `protobuf:"varint,2,opt,name=proposal_num,json=proposalNum"`
-	xxx_hidden_Value       string                 `protobuf:"bytes,3,opt,name=value"`
-	xxx_hidden_ProposerId  uint32                 `protobuf:"varint,4,opt,name=proposer_id,json=proposerId"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"hybrid.v1"`
+	Instance      uint32                 `protobuf:"varint,1,opt,name=instance" json:"instance,omitempty"`                          // Instance/slot number for Multi-Paxos
+	ProposalNum   uint32                 `protobuf:"varint,2,opt,name=proposal_num,json=proposalNum" json:"proposal_num,omitempty"` // Proposal number (n)
+	Value         string                 `protobuf:"bytes,3,opt,name=value" json:"value,omitempty"`                                 // Value to accept
+	ProposerId    uint32                 `protobuf:"varint,4,opt,name=proposer_id,json=proposerId" json:"proposer_id,omitempty"`    // ID of the proposer
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AcceptRequest) Reset() {
 	*x = AcceptRequest{}
-	mi := &file_paxos_proto_paxos_proto_msgTypes[2]
+	mi := &file_paxos_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -246,7 +248,7 @@ func (x *AcceptRequest) String() string {
 func (*AcceptRequest) ProtoMessage() {}
 
 func (x *AcceptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paxos_proto_paxos_proto_msgTypes[2]
+	mi := &file_paxos_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -259,46 +261,46 @@ func (x *AcceptRequest) ProtoReflect() protoreflect.Message {
 
 func (x *AcceptRequest) GetInstance() uint32 {
 	if x != nil {
-		return x.xxx_hidden_Instance
+		return x.Instance
 	}
 	return 0
 }
 
 func (x *AcceptRequest) GetProposalNum() uint32 {
 	if x != nil {
-		return x.xxx_hidden_ProposalNum
+		return x.ProposalNum
 	}
 	return 0
 }
 
 func (x *AcceptRequest) GetValue() string {
 	if x != nil {
-		return x.xxx_hidden_Value
+		return x.Value
 	}
 	return ""
 }
 
 func (x *AcceptRequest) GetProposerId() uint32 {
 	if x != nil {
-		return x.xxx_hidden_ProposerId
+		return x.ProposerId
 	}
 	return 0
 }
 
 func (x *AcceptRequest) SetInstance(v uint32) {
-	x.xxx_hidden_Instance = v
+	x.Instance = v
 }
 
 func (x *AcceptRequest) SetProposalNum(v uint32) {
-	x.xxx_hidden_ProposalNum = v
+	x.ProposalNum = v
 }
 
 func (x *AcceptRequest) SetValue(v string) {
-	x.xxx_hidden_Value = v
+	x.Value = v
 }
 
 func (x *AcceptRequest) SetProposerId(v uint32) {
-	x.xxx_hidden_ProposerId = v
+	x.ProposerId = v
 }
 
 type AcceptRequest_builder struct {
@@ -314,27 +316,27 @@ func (b0 AcceptRequest_builder) Build() *AcceptRequest {
 	m0 := &AcceptRequest{}
 	b, x := &b0, m0
 	_, _ = b, x
-	x.xxx_hidden_Instance = b.Instance
-	x.xxx_hidden_ProposalNum = b.ProposalNum
-	x.xxx_hidden_Value = b.Value
-	x.xxx_hidden_ProposerId = b.ProposerId
+	x.Instance = b.Instance
+	x.ProposalNum = b.ProposalNum
+	x.Value = b.Value
+	x.ProposerId = b.ProposerId
 	return m0
 }
 
 // AcceptedResponse is Phase 2b message from acceptor to proposer.
 type AcceptedResponse struct {
-	state                  protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_AcceptorId  uint32                 `protobuf:"varint,1,opt,name=acceptor_id,json=acceptorId"`
-	xxx_hidden_Instance    uint32                 `protobuf:"varint,2,opt,name=instance"`
-	xxx_hidden_Accepted    bool                   `protobuf:"varint,3,opt,name=accepted"`
-	xxx_hidden_ProposalNum uint32                 `protobuf:"varint,4,opt,name=proposal_num,json=proposalNum"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"hybrid.v1"`
+	AcceptorId    uint32                 `protobuf:"varint,1,opt,name=acceptor_id,json=acceptorId" json:"acceptor_id,omitempty"`    // ID of responding acceptor
+	Instance      uint32                 `protobuf:"varint,2,opt,name=instance" json:"instance,omitempty"`                          // Instance/slot number
+	Accepted      bool                   `protobuf:"varint,3,opt,name=accepted" json:"accepted,omitempty"`                          // Whether acceptor accepted the value
+	ProposalNum   uint32                 `protobuf:"varint,4,opt,name=proposal_num,json=proposalNum" json:"proposal_num,omitempty"` // Proposal number accepted
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AcceptedResponse) Reset() {
 	*x = AcceptedResponse{}
-	mi := &file_paxos_proto_paxos_proto_msgTypes[3]
+	mi := &file_paxos_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -346,7 +348,7 @@ func (x *AcceptedResponse) String() string {
 func (*AcceptedResponse) ProtoMessage() {}
 
 func (x *AcceptedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paxos_proto_paxos_proto_msgTypes[3]
+	mi := &file_paxos_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -359,46 +361,46 @@ func (x *AcceptedResponse) ProtoReflect() protoreflect.Message {
 
 func (x *AcceptedResponse) GetAcceptorId() uint32 {
 	if x != nil {
-		return x.xxx_hidden_AcceptorId
+		return x.AcceptorId
 	}
 	return 0
 }
 
 func (x *AcceptedResponse) GetInstance() uint32 {
 	if x != nil {
-		return x.xxx_hidden_Instance
+		return x.Instance
 	}
 	return 0
 }
 
 func (x *AcceptedResponse) GetAccepted() bool {
 	if x != nil {
-		return x.xxx_hidden_Accepted
+		return x.Accepted
 	}
 	return false
 }
 
 func (x *AcceptedResponse) GetProposalNum() uint32 {
 	if x != nil {
-		return x.xxx_hidden_ProposalNum
+		return x.ProposalNum
 	}
 	return 0
 }
 
 func (x *AcceptedResponse) SetAcceptorId(v uint32) {
-	x.xxx_hidden_AcceptorId = v
+	x.AcceptorId = v
 }
 
 func (x *AcceptedResponse) SetInstance(v uint32) {
-	x.xxx_hidden_Instance = v
+	x.Instance = v
 }
 
 func (x *AcceptedResponse) SetAccepted(v bool) {
-	x.xxx_hidden_Accepted = v
+	x.Accepted = v
 }
 
 func (x *AcceptedResponse) SetProposalNum(v uint32) {
-	x.xxx_hidden_ProposalNum = v
+	x.ProposalNum = v
 }
 
 type AcceptedResponse_builder struct {
@@ -414,27 +416,27 @@ func (b0 AcceptedResponse_builder) Build() *AcceptedResponse {
 	m0 := &AcceptedResponse{}
 	b, x := &b0, m0
 	_, _ = b, x
-	x.xxx_hidden_AcceptorId = b.AcceptorId
-	x.xxx_hidden_Instance = b.Instance
-	x.xxx_hidden_Accepted = b.Accepted
-	x.xxx_hidden_ProposalNum = b.ProposalNum
+	x.AcceptorId = b.AcceptorId
+	x.Instance = b.Instance
+	x.Accepted = b.Accepted
+	x.ProposalNum = b.ProposalNum
 	return m0
 }
 
 // LearnRequest notifies learners of chosen value.
 type LearnRequest struct {
-	state                  protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_Instance    uint32                 `protobuf:"varint,1,opt,name=instance"`
-	xxx_hidden_ProposalNum uint32                 `protobuf:"varint,2,opt,name=proposal_num,json=proposalNum"`
-	xxx_hidden_Value       string                 `protobuf:"bytes,3,opt,name=value"`
-	xxx_hidden_ProposerId  uint32                 `protobuf:"varint,4,opt,name=proposer_id,json=proposerId"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"hybrid.v1"`
+	Instance      uint32                 `protobuf:"varint,1,opt,name=instance" json:"instance,omitempty"`                          // Instance/slot number
+	ProposalNum   uint32                 `protobuf:"varint,2,opt,name=proposal_num,json=proposalNum" json:"proposal_num,omitempty"` // Proposal number that was chosen
+	Value         string                 `protobuf:"bytes,3,opt,name=value" json:"value,omitempty"`                                 // The chosen value
+	ProposerId    uint32                 `protobuf:"varint,4,opt,name=proposer_id,json=proposerId" json:"proposer_id,omitempty"`    // ID of the proposer
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LearnRequest) Reset() {
 	*x = LearnRequest{}
-	mi := &file_paxos_proto_paxos_proto_msgTypes[4]
+	mi := &file_paxos_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -446,7 +448,7 @@ func (x *LearnRequest) String() string {
 func (*LearnRequest) ProtoMessage() {}
 
 func (x *LearnRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paxos_proto_paxos_proto_msgTypes[4]
+	mi := &file_paxos_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -459,46 +461,46 @@ func (x *LearnRequest) ProtoReflect() protoreflect.Message {
 
 func (x *LearnRequest) GetInstance() uint32 {
 	if x != nil {
-		return x.xxx_hidden_Instance
+		return x.Instance
 	}
 	return 0
 }
 
 func (x *LearnRequest) GetProposalNum() uint32 {
 	if x != nil {
-		return x.xxx_hidden_ProposalNum
+		return x.ProposalNum
 	}
 	return 0
 }
 
 func (x *LearnRequest) GetValue() string {
 	if x != nil {
-		return x.xxx_hidden_Value
+		return x.Value
 	}
 	return ""
 }
 
 func (x *LearnRequest) GetProposerId() uint32 {
 	if x != nil {
-		return x.xxx_hidden_ProposerId
+		return x.ProposerId
 	}
 	return 0
 }
 
 func (x *LearnRequest) SetInstance(v uint32) {
-	x.xxx_hidden_Instance = v
+	x.Instance = v
 }
 
 func (x *LearnRequest) SetProposalNum(v uint32) {
-	x.xxx_hidden_ProposalNum = v
+	x.ProposalNum = v
 }
 
 func (x *LearnRequest) SetValue(v string) {
-	x.xxx_hidden_Value = v
+	x.Value = v
 }
 
 func (x *LearnRequest) SetProposerId(v uint32) {
-	x.xxx_hidden_ProposerId = v
+	x.ProposerId = v
 }
 
 type LearnRequest_builder struct {
@@ -514,26 +516,26 @@ func (b0 LearnRequest_builder) Build() *LearnRequest {
 	m0 := &LearnRequest{}
 	b, x := &b0, m0
 	_, _ = b, x
-	x.xxx_hidden_Instance = b.Instance
-	x.xxx_hidden_ProposalNum = b.ProposalNum
-	x.xxx_hidden_Value = b.Value
-	x.xxx_hidden_ProposerId = b.ProposerId
+	x.Instance = b.Instance
+	x.ProposalNum = b.ProposalNum
+	x.Value = b.Value
+	x.ProposerId = b.ProposerId
 	return m0
 }
 
 // LearnResponse acknowledges learning.
 type LearnResponse struct {
-	state                protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_LearnerId uint32                 `protobuf:"varint,1,opt,name=learner_id,json=learnerId"`
-	xxx_hidden_Instance  uint32                 `protobuf:"varint,2,opt,name=instance"`
-	xxx_hidden_Learned   bool                   `protobuf:"varint,3,opt,name=learned"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"hybrid.v1"`
+	LearnerId     uint32                 `protobuf:"varint,1,opt,name=learner_id,json=learnerId" json:"learner_id,omitempty"` // ID of responding learner
+	Instance      uint32                 `protobuf:"varint,2,opt,name=instance" json:"instance,omitempty"`                    // Instance/slot number
+	Learned       bool                   `protobuf:"varint,3,opt,name=learned" json:"learned,omitempty"`                      // Whether learner learned this value
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LearnResponse) Reset() {
 	*x = LearnResponse{}
-	mi := &file_paxos_proto_paxos_proto_msgTypes[5]
+	mi := &file_paxos_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -545,7 +547,7 @@ func (x *LearnResponse) String() string {
 func (*LearnResponse) ProtoMessage() {}
 
 func (x *LearnResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paxos_proto_paxos_proto_msgTypes[5]
+	mi := &file_paxos_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -558,35 +560,35 @@ func (x *LearnResponse) ProtoReflect() protoreflect.Message {
 
 func (x *LearnResponse) GetLearnerId() uint32 {
 	if x != nil {
-		return x.xxx_hidden_LearnerId
+		return x.LearnerId
 	}
 	return 0
 }
 
 func (x *LearnResponse) GetInstance() uint32 {
 	if x != nil {
-		return x.xxx_hidden_Instance
+		return x.Instance
 	}
 	return 0
 }
 
 func (x *LearnResponse) GetLearned() bool {
 	if x != nil {
-		return x.xxx_hidden_Learned
+		return x.Learned
 	}
 	return false
 }
 
 func (x *LearnResponse) SetLearnerId(v uint32) {
-	x.xxx_hidden_LearnerId = v
+	x.LearnerId = v
 }
 
 func (x *LearnResponse) SetInstance(v uint32) {
-	x.xxx_hidden_Instance = v
+	x.Instance = v
 }
 
 func (x *LearnResponse) SetLearned(v bool) {
-	x.xxx_hidden_Learned = v
+	x.Learned = v
 }
 
 type LearnResponse_builder struct {
@@ -601,17 +603,17 @@ func (b0 LearnResponse_builder) Build() *LearnResponse {
 	m0 := &LearnResponse{}
 	b, x := &b0, m0
 	_, _ = b, x
-	x.xxx_hidden_LearnerId = b.LearnerId
-	x.xxx_hidden_Instance = b.Instance
-	x.xxx_hidden_Learned = b.Learned
+	x.LearnerId = b.LearnerId
+	x.Instance = b.Instance
+	x.Learned = b.Learned
 	return m0
 }
 
-var File_paxos_proto_paxos_proto protoreflect.FileDescriptor
+var File_paxos_proto protoreflect.FileDescriptor
 
-const file_paxos_proto_paxos_proto_rawDesc = "" +
+const file_paxos_proto_rawDesc = "" +
 	"\n" +
-	"\x17paxos/proto/paxos.proto\x12\x05paxos\x1a\fgorums.proto\"p\n" +
+	"\vpaxos.proto\x12\x05paxos\x1a\fgorums.proto\"p\n" +
 	"\x0ePrepareRequest\x12\x1a\n" +
 	"\binstance\x18\x01 \x01(\rR\binstance\x12!\n" +
 	"\fproposal_num\x18\x02 \x01(\rR\vproposalNum\x12\x1f\n" +
@@ -652,8 +654,8 @@ const file_paxos_proto_paxos_proto_rawDesc = "" +
 	"\x06Accept\x12\x14.paxos.AcceptRequest\x1a\x17.paxos.AcceptedResponse\"\x04\xa0\xb5\x18\x01\x128\n" +
 	"\x05Learn\x12\x13.paxos.LearnRequest\x1a\x14.paxos.LearnResponse\"\x04\xa0\xb5\x18\x01B\"Z\x1bgorums/examples/paxos/proto\x92\x03\x02\b\x02b\beditionsp\xe8\a"
 
-var file_paxos_proto_paxos_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
-var file_paxos_proto_paxos_proto_goTypes = []any{
+var file_paxos_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_paxos_proto_goTypes = []any{
 	(*PrepareRequest)(nil),   // 0: paxos.PrepareRequest
 	(*PromiseResponse)(nil),  // 1: paxos.PromiseResponse
 	(*AcceptRequest)(nil),    // 2: paxos.AcceptRequest
@@ -661,7 +663,7 @@ var file_paxos_proto_paxos_proto_goTypes = []any{
 	(*LearnRequest)(nil),     // 4: paxos.LearnRequest
 	(*LearnResponse)(nil),    // 5: paxos.LearnResponse
 }
-var file_paxos_proto_paxos_proto_depIdxs = []int32{
+var file_paxos_proto_depIdxs = []int32{
 	0, // 0: paxos.Paxos.Prepare:input_type -> paxos.PrepareRequest
 	2, // 1: paxos.Paxos.Accept:input_type -> paxos.AcceptRequest
 	4, // 2: paxos.Paxos.Learn:input_type -> paxos.LearnRequest
@@ -675,26 +677,26 @@ var file_paxos_proto_paxos_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_paxos_proto_paxos_proto_init() }
-func file_paxos_proto_paxos_proto_init() {
-	if File_paxos_proto_paxos_proto != nil {
+func init() { file_paxos_proto_init() }
+func file_paxos_proto_init() {
+	if File_paxos_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paxos_proto_paxos_proto_rawDesc), len(file_paxos_proto_paxos_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paxos_proto_rawDesc), len(file_paxos_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_paxos_proto_paxos_proto_goTypes,
-		DependencyIndexes: file_paxos_proto_paxos_proto_depIdxs,
-		MessageInfos:      file_paxos_proto_paxos_proto_msgTypes,
+		GoTypes:           file_paxos_proto_goTypes,
+		DependencyIndexes: file_paxos_proto_depIdxs,
+		MessageInfos:      file_paxos_proto_msgTypes,
 	}.Build()
-	File_paxos_proto_paxos_proto = out.File
-	file_paxos_proto_paxos_proto_goTypes = nil
-	file_paxos_proto_paxos_proto_depIdxs = nil
+	File_paxos_proto = out.File
+	file_paxos_proto_goTypes = nil
+	file_paxos_proto_depIdxs = nil
 }
