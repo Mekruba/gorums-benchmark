@@ -145,8 +145,3 @@ services:
     deploy:
       placement:
         constraints: [node.hostname == node-1]
-
-networks:
-  default:
-    external: true
-    name: MasterLab
