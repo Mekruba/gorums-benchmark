@@ -59,10 +59,16 @@ func (b *PaxosATABenchmark) AddClient(id int, addr string, srvAddrs []string, lo
 }
 
 func (*PaxosATABenchmark) warmup(client *paxosataClient.Client) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_ = ctx
-	client.Write(context.Background(), "warmup") //nolint:errcheck
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		err := client.Write(ctx, "warmup")
+		cancel()
+		if err == nil {
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
 func (b *PaxosATABenchmark) StartBenchmark(_ *paxosataClient.Client) []Result {
