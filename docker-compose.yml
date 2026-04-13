@@ -19,7 +19,7 @@ services:
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
-      - /home/ubuntu/gorums-benchmark/logs:/app/logs
+      - ./logs:/app/logs
     deploy:
       placement:
         constraints: [node.hostname == node-1]
@@ -44,7 +44,7 @@ services:
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
-      - /home/ubuntu/gorums-benchmark/logs:/app/logs
+      - ./logs:/app/logs
     deploy:
       placement:
         constraints: [node.hostname == node-2]
@@ -69,7 +69,7 @@ services:
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
-      - /home/ubuntu/gorums-benchmark/logs:/app/logs
+      - ./logs:/app/logs
     deploy:
       placement:
         constraints: [node.hostname == node-3]
@@ -94,7 +94,7 @@ services:
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
-      - /home/ubuntu/gorums-benchmark/logs:/app/logs
+      - ./logs:/app/logs
     deploy:
       placement:
         constraints: [node.hostname == node-4]
@@ -117,8 +117,8 @@ services:
       - DUR=${DUR}
       - LOG=${LOG}
     volumes:
-      - /home/ubuntu/gorums-benchmark/logs:/app/logs
-      - /home/ubuntu/gorums-benchmark/csv:/app/src/csv
+      - ./logs:/app/logs
+      - ./csv:/app/src/csv
     deploy:
       placement:
         constraints: [node.hostname == node-1]

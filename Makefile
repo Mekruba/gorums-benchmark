@@ -16,8 +16,20 @@ setup:
 docker:
 	docker compose up --build
 
+local-up:
+	docker compose -f docker-compose.local.yml up --build
+
 local-down:
-	docker compose down
+	docker compose -f docker-compose.local.yml down
+
+# --- DISTRIBUTED EXECUTION (host network, no swarm) ---
+# Run on each VM: make dist-srv ID=1
+dist-srv:
+	docker compose -f docker-compose.local.yml up srv$(ID) --build
+
+# Run on client node after all servers are up
+dist-client:
+	docker compose -f docker-compose.local.yml up client --build --no-deps
 
 # --- DISTRIBUTED EXECUTION (Swarm) ---
 deploy:
