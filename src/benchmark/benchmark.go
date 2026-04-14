@@ -52,9 +52,10 @@ type Result struct {
 }
 
 type RequestResult struct {
-	err   error
-	start time.Time
-	end   time.Time
+	err    error
+	start  time.Time
+	end    time.Time
+	reqNum int
 }
 
 type Benchmark[S, C any] interface {
@@ -432,7 +433,15 @@ func runBenchmark[S, C any](opts benchmarkOption, benchmark Benchmark[S, C]) (Cl
 			}
 			if res.err != nil {
 				numFailed++
-				slog.Info("benchmark:", "replies", i, "total", totalNumReqs, "successes", i-numFailed, "failures", numFailed, "err", res.err)
+				slog.Info("benchmark:",
+					"replies", i,
+					"total", totalNumReqs,
+					"successes", i-numFailed,
+					"failures", numFailed,
+					"req_num", res.reqNum,
+					"latency_ms", res.end.Sub(res.start).Milliseconds(),
+					"err", res.err,
+				)
 				continue
 			}
 			dur := res.end.Sub(res.start)
@@ -686,9 +695,10 @@ func runThroughput[S, C any](opts benchmarkOption, benchmark Benchmark[S, C], re
 					err := benchmark.Run(client, ctx, i)
 					end := time.Now()
 					resChan <- RequestResult{
-						err:   err,
-						start: start,
-						end:   end,
+						err:    err,
+						start:  start,
+						end:    end,
+						reqNum: i,
 					}
 				}(client, i)
 			}
