@@ -235,10 +235,7 @@ func runBenchmark(name string, clients ServerEntry, throughput, numClients, clie
 		}
 		options = append(options, bench.WithClients(clientsMap))
 	}
-	// For simplex, always use the 4-node local addresses in local mode.
-	if name == bench.SimplexGorums && local {
-		options = append(options, bench.WithSrvAddrs(bench.SimplexAddrs))
-	}
+	// For simplex in local mode, srvAddrs are already set from the config (same as other benchmarks).
 	bench.RunBenchmark(name, options...)
 }
 

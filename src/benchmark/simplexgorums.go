@@ -10,31 +10,31 @@ import (
 	simplexserver "github.com/Mekruba/gorums-benchmark/simplex.gorums/server"
 )
 
-// SimplexAddrs are the default local addresses for the 4-node simplex cluster.
-var SimplexAddrs = []string{
-	"127.0.0.1:9090",
-	"127.0.0.1:9091",
-	"127.0.0.1:9092",
-	"127.0.0.1:9093",
-}
-
-var simplexNewNodes = []simplexserver.NodeInfo{
-	{ID: 1, Addr: "127.0.0.1:9090"},
-	{ID: 2, Addr: "127.0.0.1:9091"},
-	{ID: 3, Addr: "127.0.0.1:9092"},
-	{ID: 4, Addr: "127.0.0.1:9093"},
+// simplexSrvAddrsToNodes converts the index-keyed address slice used by the
+// benchmark framework into the NodeInfo slice expected by the simplex package.
+func simplexSrvAddrsToNodes(srvAddrs []string) []simplexserver.NodeInfo {
+	nodes := make([]simplexserver.NodeInfo, 0, len(srvAddrs))
+	for i, addr := range srvAddrs {
+		if addr == "" {
+			continue
+		}
+		nodes = append(nodes, simplexserver.NodeInfo{ID: uint32(i), Addr: addr})
+	}
+	return nodes
 }
 
 // ── benchmark implementation ──────────────────────────────────────────────────
 
 type SimplexGorumsBenchmark struct {
 	clients []*simplexserver.Client
+	nodes   []simplexserver.NodeInfo
 	counter atomic.Uint64
 }
 
-func (b *SimplexGorumsBenchmark) CreateServer(addr string, _ []string) (*simplexserver.Server, func(), error) {
+func (b *SimplexGorumsBenchmark) CreateServer(addr string, srvAddrs []string) (*simplexserver.Server, func(), error) {
+	nodes := simplexSrvAddrsToNodes(srvAddrs)
 	var id uint32
-	for _, n := range simplexNewNodes {
+	for _, n := range nodes {
 		if n.Addr == addr {
 			id = n.ID
 			break
@@ -43,7 +43,7 @@ func (b *SimplexGorumsBenchmark) CreateServer(addr string, _ []string) (*simplex
 	if id == 0 {
 		return nil, nil, fmt.Errorf("simplex: unknown addr %s", addr)
 	}
-	srv, err := simplexserver.StartServer(id, simplexNewNodes)
+	srv, err := simplexserver.StartServer(id, nodes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -51,14 +51,18 @@ func (b *SimplexGorumsBenchmark) CreateServer(addr string, _ []string) (*simplex
 }
 
 func (b *SimplexGorumsBenchmark) Init(opts RunOptions) {
+	b.nodes = simplexSrvAddrsToNodes(opts.srvAddrs)
+	if len(b.nodes) == 0 {
+		panic("simplex: no server addresses provided in RunOptions.srvAddrs")
+	}
 	// Pre-generate keys for all nodes before any server is started.
-	simplexserver.InitKeys(len(simplexNewNodes))
+	simplexserver.InitKeys(len(b.nodes))
 	b.clients = make([]*simplexserver.Client, 0, opts.numClients)
 	createClients(b, opts)
 }
 
 func (b *SimplexGorumsBenchmark) AddClient(_ int, _ string, _ []string, _ *slog.Logger) {
-	c := simplexserver.NewClient(simplexNewNodes)
+	c := simplexserver.NewClient(b.nodes)
 	b.clients = append(b.clients, c)
 }
 
@@ -80,10 +84,11 @@ func (b *SimplexGorumsBenchmark) Stop() {
 }
 
 func (b *SimplexGorumsBenchmark) StartBenchmark(_ *simplexserver.Client) []Result {
-	// All servers are now listening. Give gRPC time to establish peer connections,
-	// then start the Simplex protocol on all nodes simultaneously.
+	// In local mode all servers are in-process: start protocol on each.
+	// In docker mode Lookup returns nil (servers are remote); the servers
+	// auto-start their protocol via their Start(false) goroutine.
 	time.Sleep(1500 * time.Millisecond)
-	for _, n := range simplexNewNodes {
+	for _, n := range b.nodes {
 		if srv := simplexserver.Lookup(n.Addr); srv != nil {
 			srv.StartProtocol()
 		}
@@ -96,22 +101,17 @@ func (b *SimplexGorumsBenchmark) StopBenchmark(_ *simplexserver.Client) []Result
 }
 
 // Run submits one transaction to the cluster and waits for it to be finalized.
-// It picks the node that is most likely the current leader based on height,
-// falling back to a round-robin if no nodes are reachable.
 func (b *SimplexGorumsBenchmark) Run(c *simplexserver.Client, ctx context.Context, _ int) error {
 	seq := b.counter.Add(1)
 	tx := fmt.Sprintf("bm.%d", seq)
 
-	// Try to submit to the current leader for minimal latency.
-	// Leader is deterministic: leaderForHeight(h, n) using SHA-256.
-	// We look up nodes in order and pick the one that is currently a leader.
-	// Fallback: round-robin across all nodes.
-	idx := int(seq-1) % len(simplexNewNodes)
-	targetAddr := simplexNewNodes[idx].Addr
+	idx := int(seq-1) % len(b.nodes)
+	targetAddr := b.nodes[idx].Addr
 
-	// Walk forward to find a registered server.
-	for i := range simplexNewNodes {
-		tryAddr := simplexNewNodes[(idx+i)%len(simplexNewNodes)].Addr
+	// Walk forward to find a registered in-process server (local mode).
+	// In docker mode all lookups return nil; the client submits via gRPC instead.
+	for i := range b.nodes {
+		tryAddr := b.nodes[(idx+i)%len(b.nodes)].Addr
 		srv := simplexserver.Lookup(tryAddr)
 		if srv != nil {
 			targetAddr = tryAddr
@@ -120,8 +120,9 @@ func (b *SimplexGorumsBenchmark) Run(c *simplexserver.Client, ctx context.Contex
 	}
 
 	srv := simplexserver.Lookup(targetAddr)
-	if srv == nil {
-		return fmt.Errorf("simplex: no server found at %s", targetAddr)
+	if srv != nil {
+		return srv.AddTxAndWait(ctx, tx)
 	}
-	return srv.AddTxAndWait(ctx, tx)
+	// Docker mode: submit via the client's gRPC connection.
+	return c.Submit(ctx, tx, b.nodes[idx].ID)
 }

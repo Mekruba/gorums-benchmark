@@ -3,11 +3,17 @@ package server
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/rand"
+	"fmt"
+	"io"
 	"log"
 	"log/slog"
+	"math/rand"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -36,14 +42,18 @@ var privKeys map[uint32]ed25519.PrivateKey
 var pubKeys map[uint32]ed25519.PublicKey
 
 // InitKeys pre-generates ed25519 key pairs for n nodes (IDs 1..n).
+// Uses a fixed seed so all nodes (including separate containers) produce
+// identical key pairs and can verify each other's signatures.
 // Must be called before StartServer.
 func InitKeys(n int) {
 	keysMu.Lock()
 	defer keysMu.Unlock()
+	// Fixed seed: all processes must generate keys in the same order.
+	rng := rand.New(rand.NewSource(0x53696d706c6578)) //nolint:gosec
 	privKeys = make(map[uint32]ed25519.PrivateKey, n)
 	pubKeys = make(map[uint32]ed25519.PublicKey, n)
 	for i := 1; i <= n; i++ {
-		pub, priv, err := ed25519.GenerateKey(rand.Reader)
+		pub, priv, err := ed25519.GenerateKey(rng)
 		if err != nil {
 			log.Fatalf("simplex: ed25519.GenerateKey: %v", err)
 		}
@@ -103,7 +113,7 @@ func New(id uint32, addr string, peers map[int]string) *Server {
 }
 
 // Start implements BenchmarkServer.
-func (s *Server) Start(_ bool) {
+func (s *Server) Start(local bool) {
 	peerMap := make(map[uint32]NodeAddr)
 	for _, n := range s.nodes {
 		peerMap[n.ID] = NodeAddr{Addr_: n.Addr}
@@ -146,7 +156,54 @@ func (s *Server) Start(_ bool) {
 	registerServer(addr, s)
 
 	slog.Info("simplex: ready", "node", s.id, "addr", addr)
-	// Protocol is started separately via StartProtocol() once all peers are up.
+
+	// Start HTTP transaction-injection endpoint (gRPC port + 100).
+	// Used by the benchmark client in docker/VM mode.
+	go s.serveHTTP(addr)
+
+	if !local {
+		// Docker mode: start the protocol after a delay to allow all peers
+		// to be up and gRPC connections to establish.
+		go func() {
+			time.Sleep(5 * time.Second)
+			slog.Info("simplex: starting protocol", "node", s.id)
+			s.nd.Start()
+		}()
+	}
+	// In local mode StartProtocol() is called explicitly by StartBenchmark().
+}
+
+// serveHTTP starts a minimal HTTP server for external transaction injection.
+// It listens on the gRPC port + 100. POST /tx <body> submits a transaction
+// and blocks until it is finalized (or the request context is cancelled).
+func (s *Server) serveHTTP(grpcAddr string) {
+	_, portStr, err := net.SplitHostPort(grpcAddr)
+	if err != nil {
+		log.Printf("simplex: serveHTTP: bad addr %s: %v", grpcAddr, err)
+		return
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.Printf("simplex: serveHTTP: bad port %s: %v", portStr, err)
+		return
+	}
+	httpAddr := fmt.Sprintf(":%d", port+100)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/tx", func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := s.nd.addTxAndWait(r.Context(), string(body)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	if err := http.ListenAndServe(httpAddr, mux); err != nil && err != http.ErrServerClosed {
+		log.Printf("simplex: HTTP server error: %v", err)
+	}
 }
 
 // Stop implements BenchmarkServer.
@@ -210,15 +267,58 @@ func RunServer(id uint32, nodes []NodeInfo, verbose bool) {
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 // Client is used by the benchmark framework. It holds the addresses of all
-// cluster nodes and submits transactions to the best available in-process node.
+// cluster nodes and submits transactions to the best available in-process node
+// or via HTTP in docker/VM mode.
 type Client struct {
-	nodes []NodeInfo
+	nodes  []NodeInfo
+	httpCl *http.Client
 }
 
 // NewClient creates a Client for the given cluster nodes.
 func NewClient(nodes []NodeInfo) *Client {
-	return &Client{nodes: nodes}
+	return &Client{
+		nodes:  nodes,
+		httpCl: &http.Client{Timeout: 30 * time.Second},
+	}
 }
 
 // Close is a no-op for the simplex client (no network connections to close).
 func (c *Client) Close() {}
+
+// Submit sends a transaction to the node with the given ID via HTTP and waits
+// for it to be finalized. Used in docker/VM mode where the server is remote.
+func (c *Client) Submit(ctx context.Context, tx string, nodeID uint32) error {
+	var addr string
+	for _, n := range c.nodes {
+		if n.ID == nodeID {
+			addr = n.Addr
+			break
+		}
+	}
+	if addr == "" {
+		return fmt.Errorf("simplex: unknown node %d", nodeID)
+	}
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("simplex: bad addr %s: %w", addr, err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return fmt.Errorf("simplex: bad port %s: %w", portStr, err)
+	}
+	url := fmt.Sprintf("http://%s:%d/tx", host, port+100)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(tx))
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpCl.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("simplex: node %d error: %s", nodeID, body)
+	}
+	return nil
+}

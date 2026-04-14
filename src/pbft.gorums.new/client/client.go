@@ -19,7 +19,9 @@ type Client struct {
 }
 
 func (c *Client) Close() {
-	c.Cfg.Close()
+	if mgr := c.Cfg.Manager(); mgr != nil {
+		mgr.Close() //nolint:errcheck
+	}
 }
 
 // NewClient creates a client connected to the given nodes.
