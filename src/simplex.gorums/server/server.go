@@ -130,8 +130,8 @@ func (s *Server) Start(local bool) {
 
 	dialOpt := gorums.WithDialOptions(grpc.WithTransportCredentials(insecure.NewCredentials()))
 	sys, err := gorums.NewSystem(addr,
-		gorums.WithConfig(s.id, peerList),
-		peerList,
+		gorums.WithServerOptions(gorums.WithConfig(s.id, peerList)),
+		gorums.WithOutboundNodes(peerList),
 		dialOpt,
 	)
 	if err != nil {

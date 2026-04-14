@@ -93,10 +93,8 @@ func (s *Server) Start(_ bool) {
 	}
 
 	sys, err := gorums.NewSystem(addr,
-		gorums.WithConfig(s.id, peerList),
-		gorums.WithReceiveBufferSize(1024),
-		gorums.WithPeerSendBufferSize(512),
-		peerList,
+		gorums.WithServerOptions(gorums.WithConfig(s.id, peerList), gorums.WithBufferSizes(1024, 512)),
+		gorums.WithOutboundNodes(peerList),
 		dialOpts,
 	)
 

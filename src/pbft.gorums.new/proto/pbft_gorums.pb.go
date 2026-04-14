@@ -44,13 +44,8 @@ var (
 //	    gorums.WithNodeList([]string{"localhost:8080", "localhost:8081", "localhost:8082"}),
 //	    gorums.WithDialOptions(grpc.WithTransportCredentials(insecure.NewCredentials())),
 //	)
-func NewConfig(nodes gorums.NodeListOption, opts ...gorums.ManagerOption) (Configuration, error) {
-	options := make([]gorums.Option, 0, 1+len(opts))
-	options = append(options, nodes)
-	for _, o := range opts {
-		options = append(options, o)
-	}
-	return gorums.NewConfig(options...)
+func NewConfig(nodes gorums.NodeListOption, opts ...gorums.DialOption) (Configuration, error) {
+	return gorums.NewConfig(nodes, opts...)
 }
 
 // AsyncReply is a future for async quorum calls returning *Reply.

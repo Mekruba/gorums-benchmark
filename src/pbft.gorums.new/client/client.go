@@ -19,9 +19,7 @@ type Client struct {
 }
 
 func (c *Client) Close() {
-	if mgr := c.Cfg.Manager(); mgr != nil {
-		mgr.Close() //nolint:errcheck
-	}
+	c.Cfg.Close() //nolint:errcheck
 }
 
 // NewClient creates a client connected to the given nodes.
@@ -89,7 +87,7 @@ func collectFPlus1Replies(responses *gorums.Responses[*pb.Reply], f int) (*pb.Re
 	needed := f + 1
 	counts := make(map[string]int)
 	var best *pb.Reply
-	for resp := range responses.Seq() {
+	for resp := range responses.Results() {
 		if resp.Err != nil {
 			log.Printf("node %d error: %v", resp.NodeID, resp.Err)
 			continue
