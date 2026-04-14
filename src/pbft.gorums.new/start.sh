@@ -1,15 +1,15 @@
-./pbft server --id 1 --verbose &
+./pbft server --id 1 &
 PID1=$!
 echo $PID1 > /tmp/pbft1.pid
 
-./pbft server --id 2 --verbose &
+./pbft server --id 2 &
 PID2=$!
 echo $PID2 > /tmp/pbft2.pid
 
-./pbft server --id 3 --verbose &
+./pbft server --id 3 &
 PID3=$!
 
-./pbft server --id 4 --verbose &
+./pbft server --id 4 &
 PID4=$!
 echo $PID4 > /tmp/pbft4.pid
 

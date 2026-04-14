@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 
 	"github.com/Mekruba/gorums-benchmark/pbft.gorums.new/client"
@@ -46,6 +48,15 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: invalid node ID %d\n", id)
 			os.Exit(1)
 		}
+		// --- PASTE THIS HERE ---
+		go func() {
+			// Use 6060 for Node 1, 6061 for Node 2, etc.
+			pprofPort := 6060 + id
+			pprofAddr := fmt.Sprintf("localhost:%d", pprofPort)
+			log.Printf("Starting pprof server on %s", pprofAddr)
+			log.Println(http.ListenAndServe(pprofAddr, nil))
+		}()
+		// -----------------------
 		server.RunServer(id, nodes, *serverVerbose)
 
 	case "client":
