@@ -125,6 +125,8 @@ func (p *PBFTServer) runPrimary() {
 }
 
 func (p *PBFTServer) ClientRequest(ctx gorums.ServerCtx, request *pb.Request) (*pb.Reply, error) {
+    slog.Debug("CLIENT-REQUEST", "node", p.id, "ts", ts)
+
 	ts := request.GetTimestamp()
 	p.received.Add(1)
 
