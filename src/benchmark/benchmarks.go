@@ -30,14 +30,6 @@ var benchTypes = map[string]benchStruct{
 			return &PbftGorumsNewBenchmark{}
 		},
 	},
-	PaxosATA: {
-		run: func(opts benchmarkOption, bench any) (ClientResult, []Result, error) {
-			return runBenchmark(opts, bench.(*PaxosATABenchmark))
-		},
-		init: func() initializable {
-			return &PaxosATABenchmark{}
-		},
-	},
 }
 
 var threeServers = []string{
