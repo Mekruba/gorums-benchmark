@@ -32,7 +32,7 @@ func InitLogger(id uint32, verbose bool) {
 	var output io.Writer = os.Stderr
 	if verbose {
 		level = slog.LevelDebug
-		filename := fmt.Sprintf("node-%d.log", id)
+		filename := fmt.Sprintf("logs/node-%d.log", id)
 		file, err := os.Create(filename)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to create log file: %v\n", err)
@@ -74,6 +74,7 @@ func NewFromNodeInfo(id uint32, nodes []NodeInfo) *Server {
 // after Start should do so themselves (see RunServer / main.go docker mode).
 func (s *Server) Start(_ bool) {
 
+	InitLogger(s.id, true)
 	peerMap := make(map[uint32]NodeAddr)
 	for _, n := range s.nodes {
 		peerMap[n.ID] = NodeAddr{Addr_: n.Addr}
