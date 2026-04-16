@@ -31,6 +31,17 @@ dist-srv:
 dist-client:
 	docker compose -f docker-compose.local.yml up client --build --no-deps
 
+# --- DISTRIBUTED PAXOS (host network, no swarm, 7 nodes) ---
+# On each node run: make paxos-srv ID=<1..7>
+paxos-srv:
+	docker compose up srv$(ID) --build
+
+# On node-1 after all servers are up:
+# THROUGHPUT=1000 STEPS=10 RUNS=1 DUR=10 make paxos-client
+paxos-client:
+	mkdir -p csv logs
+	docker compose up client --build --no-deps
+
 # --- DISTRIBUTED EXECUTION (Swarm) ---
 deploy:
 	docker stack deploy -c docker-compose.yml bench_stack

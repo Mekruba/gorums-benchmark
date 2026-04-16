@@ -1,115 +1,118 @@
 services:
   srv1:
     image: my-bench-server:latest
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Server
-    networks:
-      - MasterLab
-    ports:
-      - target: 5000
-        published: 5000
-        protocol: tcp
-        mode: host
+    network_mode: "host"
     environment:
       - ID=1
       - SERVER=1
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
       - ./logs:/app/logs
-    deploy:
-      placement:
-        constraints: [node.hostname == node-1]
 
   srv2:
     image: my-bench-server:latest
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Server
-    networks:
-      - MasterLab
-    ports:
-      - target: 5000
-        published: 5000
-        protocol: tcp
-        mode: host
+    network_mode: "host"
     environment:
       - ID=2
       - SERVER=1
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
       - ./logs:/app/logs
-    deploy:
-      placement:
-        constraints: [node.hostname == node-2]
 
   srv3:
     image: my-bench-server:latest
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Server
-    networks:
-      - MasterLab
-    ports:
-      - target: 5000
-        published: 5000
-        protocol: tcp
-        mode: host
+    network_mode: "host"
     environment:
       - ID=3
       - SERVER=1
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
       - ./logs:/app/logs
-    deploy:
-      placement:
-        constraints: [node.hostname == node-3]
 
   srv4:
     image: my-bench-server:latest
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Server
-    networks:
-      - MasterLab
-    ports:
-      - target: 5000
-        published: 5000
-        protocol: tcp
-        mode: host
+    network_mode: "host"
     environment:
       - ID=4
       - SERVER=1
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
       - LOG=${LOG}
     volumes:
       - ./logs:/app/logs
-    deploy:
-      placement:
-        constraints: [node.hostname == node-4]
+
+  srv5:
+    image: my-bench-server:latest
+    build:
+      context: .
+      dockerfile: src/Dockerfile.Server
+    network_mode: "host"
+    environment:
+      - ID=5
+      - SERVER=1
+      - CONF=${CONF}
+      - BENCH=${BENCH}
+      - LOG=${LOG}
+    volumes:
+      - ./logs:/app/logs
+
+  srv6:
+    image: my-bench-server:latest
+    build:
+      context: .
+      dockerfile: src/Dockerfile.Server
+    network_mode: "host"
+    environment:
+      - ID=6
+      - SERVER=1
+      - CONF=${CONF}
+      - BENCH=${BENCH}
+      - LOG=${LOG}
+    volumes:
+      - ./logs:/app/logs
+
+  srv7:
+    image: my-bench-server:latest
+    build:
+      context: .
+      dockerfile: src/Dockerfile.Server
+    network_mode: "host"
+    environment:
+      - ID=7
+      - SERVER=1
+      - CONF=${CONF}
+      - BENCH=${BENCH}
+      - LOG=${LOG}
+    volumes:
+      - ./logs:/app/logs
 
   client:
     image: my-bench-client:latest
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Client
-    networks:
-      - MasterLab
+    network_mode: "host"
     environment:
       - SERVER=0
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
       - THROUGHPUT=${THROUGHPUT}
       - STEPS=${STEPS}
@@ -119,12 +122,3 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./csv:/app/src/csv
-    deploy:
-      placement:
-        constraints: [node.hostname == node-1]
-      restart_policy:
-        condition: none
-
-networks:
-  MasterLab:
-    external: true
