@@ -190,6 +190,10 @@ func (p *PBFTServer) cleanupPending(ts int64) {
 	p.pendingMu.Unlock()
 }
 
+func (p *PBFTServer) Ping(ctx gorums.ServerCtx, _ *emptypb.Empty) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
+}
+
 func (p *PBFTServer) Benchmark(ctx gorums.ServerCtx, _ *emptypb.Empty) {
 	ctx.Release()
 	slog.Info("resetting state", "node", p.id)

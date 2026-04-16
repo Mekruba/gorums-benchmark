@@ -48,8 +48,14 @@ func NewConfig(nodes gorums.NodeListOption, opts ...gorums.DialOption) (Configur
 	return gorums.NewConfig(nodes, opts...)
 }
 
+// AsyncEmpty is a future for async quorum calls returning *emptypb.Empty.
+type AsyncEmpty = *gorums.Async[*emptypb.Empty]
+
 // AsyncReply is a future for async quorum calls returning *Reply.
 type AsyncReply = *gorums.Async[*Reply]
+
+// CorrectableEmpty is a correctable object for quorum calls returning *emptypb.Empty.
+type CorrectableEmpty = *gorums.Correctable[*emptypb.Empty]
 
 // CorrectableReply is a correctable object for quorum calls returning *Reply.
 type CorrectableReply = *gorums.Correctable[*Reply]
@@ -87,6 +93,14 @@ func Benchmark(ctx *ConfigContext, in *emptypb.Empty, opts ...gorums.CallOption)
 	return gorums.Multicast(ctx, in, "pbft.PBFT.Benchmark", opts...)
 }
 
+// Ping is used to probe connectivity between replicas.
+func Ping(ctx *ConfigContext, in *emptypb.Empty, opts ...gorums.CallOption) *gorums.Responses[*emptypb.Empty] {
+	return gorums.QuorumCall[*emptypb.Empty, *emptypb.Empty](
+		ctx, in, "pbft.PBFT.Ping",
+		opts...,
+	)
+}
+
 // PBFT is the server-side API for the PBFT Service
 type PBFTServer interface {
 	ClientRequest(gorums.ServerCtx, *Request) (*Reply, error)
@@ -94,6 +108,7 @@ type PBFTServer interface {
 	Prepare(gorums.ServerCtx, *PrepareMsg)
 	Commit(gorums.ServerCtx, *CommitMsg)
 	Benchmark(gorums.ServerCtx, *emptypb.Empty)
+	Ping(gorums.ServerCtx, *emptypb.Empty) (*emptypb.Empty, error)
 }
 
 func RegisterPBFTServer(srv *gorums.Server, impl PBFTServer) {
@@ -124,5 +139,13 @@ func RegisterPBFTServer(srv *gorums.Server, impl PBFTServer) {
 		req := gorums.AsProto[*emptypb.Empty](in)
 		impl.Benchmark(ctx, req)
 		return nil, nil
+	})
+	srv.RegisterHandler("pbft.PBFT.Ping", func(ctx gorums.ServerCtx, in *gorums.Message) (*gorums.Message, error) {
+		req := gorums.AsProto[*emptypb.Empty](in)
+		resp, err := impl.Ping(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return gorums.NewResponseMessage(in, resp), nil
 	})
 }

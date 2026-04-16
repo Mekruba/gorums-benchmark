@@ -27,6 +27,10 @@ service PBFT {
   rpc Benchmark(google.protobuf.Empty) returns (google.protobuf.Empty) {
     option (gorums.multicast) = true;
   }
+  // Ping is used to probe connectivity between replicas.
+  rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option (gorums.quorumcall) = true;
+  }
 }
 enum Operation {
   READ = 0;

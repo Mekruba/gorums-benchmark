@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"fmt"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	"io"
 	"log"
 	"log/slog"
@@ -118,9 +120,27 @@ func (s *Server) Start(_ bool) {
 		}
 	}()
 
+	for {
+		outbound := sys.OutboundConfig()
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		pb.Ping(outbound.Context(ctx), &emptypb.Empty{})
+		cancel()
+
+		connected := 0
+		for _, n := range outbound.Nodes() {
+			if n.LastErr() == nil {
+				connected++
+			}
+		}
+		if connected >= len(s.nodes) {
+			slog.Info("all peers connected", "node", s.id)
+			break
+		}
+		slog.Info("waiting for peers", "node", s.id, "connected", connected, "expected", len(s.nodes))
+		time.Sleep(5 * time.Second)
+	}
+
 	slog.Info("ready", "node", s.id, "addr", addr)
-	// Brief pause so all nodes finish binding before clients connect.
-	time.Sleep(2 * time.Second)
 }
 
 func (s *Server) Stop() {
