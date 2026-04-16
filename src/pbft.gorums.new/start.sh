@@ -1,23 +1,63 @@
-./pbft server --id 1 &
-PID1=$!
-echo $PID1 > /tmp/pbft1.pid
+#!/bin/bash
 
-./pbft server --id 2 &
-PID2=$!
-echo $PID2 > /tmp/pbft2.pid
+# 1. Get configuration from user (Portable prompting)
+printf "Number of faulty nodes to tolerate (1 or 2): "
+read F_NODES
 
-./pbft server --id 3 &
-PID3=$!
+if [[ "$F_NODES" != "1" && "$F_NODES" != "2" ]]; then
+    echo "Error: Only 1 or 2 faulty nodes supported for this setup."
+    exit 1
+fi
 
-./pbft server --id 4 &
-PID4=$!
-echo $PID4 > /tmp/pbft4.pid
+printf "Enable verbose logging? (y/n): "
+read VERBOSE_ANS
 
-echo "PIDs: 1=$PID1 2=$PID2 3=$PID3 4=$PID4"
-echo "To kill a replica:   kill \$(cat /tmp/pbft2.pid)"
-echo "To freeze a replica: kill -STOP \$(cat /tmp/pbft2.pid)"
-echo "To resume a replica: kill -CONT \$(cat /tmp/pbft2.pid)"
+VERBOSE_FLAG=""
+if [[ "$VERBOSE_ANS" == "y" || "$VERBOSE_ANS" == "Y" ]]; then
+    VERBOSE_FLAG="--verbose"
+fi
 
-trap "kill $PID1 $PID2 $PID3 $PID4; rm -f /tmp/pbft{1,2,3,4}.pid" SIGINT SIGTERM
+# 2. Calculate total nodes (n = 3f + 1)
+N_NODES=$((3 * F_NODES + 1))
+echo "-------------------------------------------------------"
+echo "Starting cluster with $N_NODES nodes (f=$F_NODES)..."
 
+# 3. Start servers
+PIDS=()
+for i in $(seq 1 $N_NODES); do
+    # Run the server in the background
+    ./pbft server --id $i $VERBOSE_FLAG &
+    PID=$!
+    PIDS+=($PID)
+    
+    # Save the PID so we can target it later
+    echo $PID > "/tmp/pbft$i.pid"
+    echo "Started Node $i (PID: $PID) on localhost:$((8079 + i))"
+done
+
+echo "-------------------------------------------------------"
+echo "Cluster is running."
+echo "To kill node 2:   kill \$(cat /tmp/pbft2.pid)"
+echo "To freeze node 2: kill -STOP \$(cat /tmp/pbft2.pid)"
+echo "To resume node 2: kill -CONT \$(cat /tmp/pbft2.pid)"
+echo "Press Ctrl+C to stop all nodes."
+echo "-------------------------------------------------------"
+
+# 4. Cleanup on exit
+trap_cleanup() {
+    echo -e "\n\nShutting down $N_NODES nodes..."
+    for i in $(seq 1 $N_NODES); do
+        PID_FILE="/tmp/pbft$i.pid"
+        if [ -f "$PID_FILE" ]; then
+            # kill the process group or the specific PID
+            kill $(cat "$PID_FILE") 2>/dev/null
+            rm "$PID_FILE"
+        fi
+    done
+    exit 0
+}
+
+trap trap_cleanup SIGINT SIGTERM
+
+# Wait for all background processes to keep the script alive
 wait

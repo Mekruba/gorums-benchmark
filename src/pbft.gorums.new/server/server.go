@@ -30,7 +30,6 @@ func (n NodeAddr) Addr() string { return n.Addr_ }
 func InitLogger(id uint32, verbose bool) {
 	level := slog.LevelInfo
 	var output io.Writer = os.Stderr
-
 	if verbose {
 		level = slog.LevelDebug
 		filename := fmt.Sprintf("node-%d.log", id)
@@ -43,7 +42,6 @@ func InitLogger(id uint32, verbose bool) {
 	} else {
 		level = slog.LevelWarn
 	}
-
 	handler := slog.NewTextHandler(output, &slog.HandlerOptions{Level: level})
 	slog.SetDefault(slog.New(handler))
 }
@@ -135,7 +133,6 @@ func (s *Server) Stop() {
 // StartServer starts a server and returns it. Used by the benchmark framework
 // in local mode (PbftGorumsNewBenchmark.CreateServer).
 func StartServer(id uint32, nodes []NodeInfo) (*Server, error) {
-	InitLogger(id, true)
 
 	s := NewFromNodeInfo(id, nodes)
 	s.Start(true)
