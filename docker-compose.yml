@@ -1,6 +1,6 @@
 services:
   srv1:
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Server
     network_mode: "host"
@@ -18,7 +18,7 @@ services:
         constraints: [node.hostname == node-1]
 
   srv2:
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Server
     network_mode: "host"
@@ -36,7 +36,7 @@ services:
         constraints: [node.hostname == node-2]
 
   srv3:
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Server
     network_mode: "host"
@@ -54,7 +54,7 @@ services:
         constraints: [node.hostname == node-3]
 
   srv4:
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Server
     network_mode: "host"
@@ -72,7 +72,7 @@ services:
         constraints: [node.hostname == node-4]
 
   srv5:
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Server
     network_mode: "host"
@@ -87,7 +87,7 @@ services:
       - ./logs:/app/logs
 
   srv6:
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Server
     network_mode: "host"
@@ -102,7 +102,7 @@ services:
       - ./logs:/app/logs
 
   srv7:
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Server
     network_mode: "host"
@@ -117,7 +117,7 @@ services:
       - ./logs:/app/logs
 
   client:
-    build: 
+    build:
       context: .
       dockerfile: src/Dockerfile.Client
     network_mode: "host"

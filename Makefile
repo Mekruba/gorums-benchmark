@@ -1,4 +1,4 @@
-.PHONY: proto docker clean eval setup local-up local-down deploy stop
+.PHONY: proto docker clean eval setup local-up local-down simplex-server simplex-client simplex-down deploy stop
 
 # Always export BENCH and CONF since they're required by all services.
 # For optional vars (THROUGHPUT, STEPS, etc.) only export when explicitly set
@@ -44,11 +44,10 @@ local-up:
 ifndef BENCH
 	$(error BENCH is not set. Example: make local-up BENCH=7 THROUGHPUT=1000 STEPS=1 RUNS=1 DUR=10)
 endif
-	docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+	CONF=local docker compose up --build
 
 local-down:
-	docker compose -f docker-compose.yml -f docker-compose.local.yml down
-
+	docker compose down
 # --- DISTRIBUTED EXECUTION (Swarm) ---
 deploy:
 	docker stack deploy -c docker-compose.yml bench_stack
@@ -56,7 +55,19 @@ deploy:
 stop:
 	docker stack rm bench_stack
 
-# --- EVALUATION ---
+# --- SIMPLEX DISTRIBUTED EXECUTION (non-Swarm, host network) ---
+# On each VM:    make simplex-server ID=<n>   (e.g. make simplex-server ID=1)
+# On the client: make simplex-client
+simplex-server:
+ifndef ID
+	$(error ID is not set. Example: make simplex-server ID=1)
+endif
+	docker compose -f docker-compose.simplex.yml up server --build
+simplex-client:
+	docker compose -f docker-compose.simplex.yml up client --build
+
+simplex-down:
+	docker compose -f docker-compose.simplex.yml down
 eval:
 	docker compose down
 	docker compose up --build
