@@ -30,7 +30,6 @@ func (n NodeAddr) Addr() string { return n.Addr_ }
 func InitLogger(id uint32, verbose bool) {
 	level := slog.LevelInfo
 	var output io.Writer = os.Stderr
-
 	if verbose {
 		level = slog.LevelDebug
 		filename := fmt.Sprintf("node-%d.log", id)
@@ -40,8 +39,9 @@ func InitLogger(id uint32, verbose bool) {
 		} else {
 			output = io.MultiWriter(os.Stderr, file)
 		}
+	} else {
+		level = slog.LevelWarn
 	}
-
 	handler := slog.NewTextHandler(output, &slog.HandlerOptions{Level: level})
 	slog.SetDefault(slog.New(handler))
 }
@@ -93,10 +93,11 @@ func (s *Server) Start(_ bool) {
 	}
 
 	sys, err := gorums.NewSystem(addr,
-		gorums.WithConfig(s.id, peerList),
-		gorums.WithReceiveBufferSize(1024),
-		gorums.WithPeerSendBufferSize(512),
-		peerList,
+		gorums.WithServerOptions(
+			gorums.WithConfig(s.id, peerList),
+			gorums.WithBufferSizes(1024, 1024),
+		),
+		gorums.WithOutboundNodes(peerList),
 		dialOpts,
 	)
 
@@ -132,6 +133,7 @@ func (s *Server) Stop() {
 // StartServer starts a server and returns it. Used by the benchmark framework
 // in local mode (PbftGorumsNewBenchmark.CreateServer).
 func StartServer(id uint32, nodes []NodeInfo) (*Server, error) {
+
 	s := NewFromNodeInfo(id, nodes)
 	s.Start(true)
 	return s, nil

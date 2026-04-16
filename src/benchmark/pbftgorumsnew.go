@@ -101,8 +101,7 @@ func (b *PbftGorumsNewBenchmark) StopBenchmark(_ *pbftclient.Client) []Result {
 
 func (b *PbftGorumsNewBenchmark) Run(c *pbftclient.Client, _ context.Context, _ int) error {
 	req := pbftclient.NewRequest(b.counter.Add(1))
-	reqCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
+	reqCtx, _ := context.WithTimeout(context.Background(), 15*time.Second)
 	_, err := pbftclient.Request(c.Cfg, req, reqCtx)
 	return err
 }

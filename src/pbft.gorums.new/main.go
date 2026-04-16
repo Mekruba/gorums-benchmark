@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/Mekruba/gorums-benchmark/pbft.gorums.new/client"
+	"github.com/Mekruba/gorums-benchmark/pbft.gorums.new/latency"
 	"github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
 )
 
@@ -15,11 +16,14 @@ var nodes = []server.NodeInfo{
 	{ID: 2, Addr: "localhost:8081"},
 	{ID: 3, Addr: "localhost:8082"},
 	{ID: 4, Addr: "localhost:8083"},
+	// {ID: 5, Addr: "localhost:8084"},
+	// {ID: 6, Addr: "localhost:8085"},
+	// {ID: 7, Addr: "localhost:8086"},
 }
 
 func main() {
 	serverCmd := flag.NewFlagSet("server", flag.ExitOnError)
-	serverID := serverCmd.Uint("id", 0, "Server node ID (1-4)")
+	serverID := serverCmd.Uint("id", 0, "Server node ID (1-7)")
 	serverVerbose := serverCmd.Bool("verbose", false, "Enable debug logging")
 
 	// benchCmd := flag.NewFlagSet("benchmark", flag.ExitOnError)
@@ -51,6 +55,14 @@ func main() {
 	case "client":
 		client.RunClient(nodes)
 
+	case "latency":
+		ids := make([]uint32, len(nodes))
+		for i, n := range nodes {
+			ids[i] = n.ID
+		}
+		m := latency.MatrixFromIDs(ids)
+		m.Print()
+
 	default:
 		printUsage()
 		os.Exit(1)
@@ -70,5 +82,4 @@ func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  pbft server --id <1-4> [--verbose]")
 	fmt.Println("  pbft client")
-	fmt.Println("  pbft benchmark --mode <latency|throughput> --n <requests> [--steps N]")
 }

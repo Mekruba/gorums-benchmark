@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"log"
+	"log/slog"
 	"time"
 
 	pb "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/proto"
@@ -76,30 +77,13 @@ func NewRequest(counter uint64) *pb.Request {
 func Request(cfg gorums.Configuration, req *pb.Request, ctx context.Context) (*pb.Reply, error) {
 	f := (cfg.Size() - 1) / 3
 	cfgCtx := cfg.Context(ctx)
-	reply, err := collectFPlus1Replies(pb.ClientRequest(cfgCtx, req), f)
+	reply, err := pb.ClientRequest(cfgCtx, req).Threshold(f + 1)
 	if err != nil {
-		log.Printf("request failed: ts=%d err=%v", req.GetTimestamp(), err)
+		slog.Warn("request incomplete",
+			"ts", req.GetTimestamp(),
+			"needed", f+1,
+			"err", err,
+		)
 	}
 	return reply, err
-}
-
-func collectFPlus1Replies(responses *gorums.Responses[*pb.Reply], f int) (*pb.Reply, error) {
-	needed := f + 1
-	counts := make(map[string]int)
-	var best *pb.Reply
-	for resp := range responses.Seq() {
-		if resp.Err != nil {
-			log.Printf("node %d error: %v", resp.NodeID, resp.Err)
-			continue
-		}
-		result := resp.Value.GetResult()
-		counts[result]++
-		if counts[result] == needed {
-			best = resp.Value
-		}
-	}
-	if best != nil {
-		return best, nil
-	}
-	return nil, gorums.ErrIncomplete
 }

@@ -133,4 +133,4 @@ services:
       - LOG=${LOG}
     volumes:
       - ./logs:/app/logs
-      - ./csv:/app/src/csv
+      - ./csv:/app/src/csv:Z

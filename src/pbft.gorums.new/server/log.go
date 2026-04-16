@@ -3,14 +3,36 @@ package server
 import "sync"
 
 type logEntry struct {
+	mu           sync.Mutex
 	seq          uint64
 	ts           int64
 	prepareCount int
 	commitCount  int
 	sentPrepare  bool
+	prepared     bool
 	sentCommit   bool
-	committed    bool
+	commited     bool
 	executed     bool
+}
+
+func (e *logEntry) checkPrepared(f int) bool {
+
+	if e.sentPrepare && e.prepareCount >= 2*f && !e.prepared {
+		e.prepared = true
+		e.sentCommit = true
+		return true
+	}
+	return false
+}
+
+func (e *logEntry) checkCommitted(f int) bool {
+
+	if e.prepared && e.commitCount >= (2*f+1) && !e.commited {
+		e.commited = true
+		e.executed = true
+		return true
+	}
+	return false
 }
 
 type MessageLog struct {
@@ -22,17 +44,21 @@ func NewMessageLog() *MessageLog {
 	return &MessageLog{entries: make(map[uint64]*logEntry)}
 }
 
-// Update handles the lock and lookup, then lets you run logic safely.
-func (ml *MessageLog) Update(seq uint64, fn func(e *logEntry)) *logEntry {
+func (ml *MessageLog) GetOrCreate(seq uint64) *logEntry {
+	ml.mu.RLock()
+	e, ok := ml.entries[seq]
+	ml.mu.RUnlock()
+	if ok {
+		return e
+	}
+
 	ml.mu.Lock()
 	defer ml.mu.Unlock()
-
-	e, ok := ml.entries[seq]
-	if !ok {
-		e = &logEntry{seq: seq}
-		ml.entries[seq] = e
+	if e, ok = ml.entries[seq]; ok {
+		return e
 	}
-	fn(e)
+	e = &logEntry{seq: seq}
+	ml.entries[seq] = e
 	return e
 }
 
