@@ -18,8 +18,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/relab/gorums"
 	pb "github.com/Mekruba/gorums-benchmark/simplex.gorums/proto"
+	"github.com/relab/gorums"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -128,8 +128,17 @@ func (s *Server) Start(local bool) {
 		}
 	}
 
+	// Listen on all interfaces so the container/VM doesn't need the config
+	// IP bound to a specific interface. Peers still connect using the full
+	// addr (IP:port) from the config via peerMap.
+	_, port, splitErr := net.SplitHostPort(addr)
+	if splitErr != nil {
+		log.Fatalf("simplex: bad self addr %q: %v", addr, splitErr)
+	}
+	listenAddr := ":" + port
+
 	dialOpt := gorums.WithDialOptions(grpc.WithTransportCredentials(insecure.NewCredentials()))
-	sys, err := gorums.NewSystem(addr,
+	sys, err := gorums.NewSystem(listenAddr,
 		gorums.WithServerOptions(gorums.WithConfig(s.id, peerList)),
 		gorums.WithOutboundNodes(peerList),
 		dialOpt,
