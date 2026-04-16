@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/relab/gorums"
-	pb "github.com/relab/gorums/examples/simplex/proto"
+	pb "github.com/Mekruba/gorums-benchmark/simplex.gorums/proto"
 )
 
 // delta is the assumed upper bound on network message delay.

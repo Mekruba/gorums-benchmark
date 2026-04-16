@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/relab/gorums"
-	pb "github.com/relab/gorums/examples/simplex/proto"
+	pb "github.com/Mekruba/gorums-benchmark/simplex.gorums/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

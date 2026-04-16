@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	pb "github.com/relab/gorums/examples/simplex/proto"
+	pb "github.com/Mekruba/gorums-benchmark/simplex.gorums/proto"
 )
 
 // Domain separation prefixes prevent signature reuse across message types.
