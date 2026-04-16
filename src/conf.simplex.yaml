@@ -15,6 +15,18 @@ servers:
       id: 4
       addr: "localhost"
       port: "9093"
+  - 5:
+      id: 5
+      addr: "localhost"
+      port: "9094"
+  - 6:
+      id: 6
+      addr: "localhost"
+      port: "9095"
+  - 7:
+      id: 7
+      addr: "localhost"
+      port: "9096"
 clients:
   - 1:
       id: 1

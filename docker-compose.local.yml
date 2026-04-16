@@ -1,0 +1,82 @@
+# Local overlay for CONF=local (ports 8080-8086). No swarm placement, health checks.
+# Health checks watch the HTTP tx-injection ports (gRPC+100 = 8180-8186) which only
+# open after the Simplex protocol has started, so the client container won't fire early.
+# Usage: make local-up  (or make local-up CONF=local BENCH=7)
+
+services:
+  srv1:
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8180"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 8s
+    deploy: !reset {}
+
+  srv2:
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8181"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 8s
+    deploy: !reset {}
+
+  srv3:
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8182"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 8s
+    deploy: !reset {}
+
+  srv4:
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8183"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 8s
+    deploy: !reset {}
+
+  srv5:
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8184"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 8s
+
+  srv6:
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8185"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 8s
+
+  srv7:
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8186"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 8s
+
+  client:
+    depends_on:
+      srv1:
+        condition: service_healthy
+      srv2:
+        condition: service_healthy
+      srv3:
+        condition: service_healthy
+      srv4:
+        condition: service_healthy
+      srv5:
+        condition: service_healthy
+      srv6:
+        condition: service_healthy
+      srv7:
+        condition: service_healthy

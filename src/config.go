@@ -26,14 +26,14 @@ type Config struct {
 func getConfig() (srvs, clients ServerEntry) {
 	confType := os.Getenv("CONF")
 	if confType == "" {
+		// Auto-select config based on benchmark type only when CONF is not explicitly set.
 		confType = "local"
-	}
-	benchType := os.Getenv("BENCH")
-	if benchType == "4" || benchType == "5" || benchType == "6" {
-		confType = "pbft"
-	}
-	if benchType == "7" {
-		confType = "simplex"
+		benchType := os.Getenv("BENCH")
+		if benchType == "4" || benchType == "5" || benchType == "6" {
+			confType = "pbft"
+		} else if benchType == "7" {
+			confType = "simplex"
+		}
 	}
 	confPath := fmt.Sprintf("conf.%s.yaml", confType)
 	data, err := os.ReadFile(confPath)

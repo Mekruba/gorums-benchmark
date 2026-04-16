@@ -169,9 +169,6 @@ func main() {
 	}
 
 	if *runSrv {
-		if srvID > len(servers) {
-			return
-		}
 		runServer(benchType, srvID, servers, *withLogger, *memProfile, *local)
 	} else {
 		runBenchmark(benchType, clients, *throughput, *numClients, *clientBasePort, *steps, *runs, *dur, *local, servers, *memProfile, *withLogger, runType)

@@ -157,18 +157,22 @@ func (s *Server) Start(local bool) {
 
 	slog.Info("simplex: ready", "node", s.id, "addr", addr)
 
-	// Start HTTP transaction-injection endpoint (gRPC port + 100).
-	// Used by the benchmark client in docker/VM mode.
-	go s.serveHTTP(addr)
-
 	if !local {
 		// Docker mode: start the protocol after a delay to allow all peers
 		// to be up and gRPC connections to establish.
+		// The HTTP tx-injection endpoint starts only after the protocol is
+		// running so the health check (which watches port+100) keeps the
+		// client container waiting until we are truly ready.
 		go func() {
 			time.Sleep(5 * time.Second)
 			slog.Info("simplex: starting protocol", "node", s.id)
 			s.nd.Start()
+			go s.serveHTTP(addr)
 		}()
+	} else {
+		// In local mode the HTTP endpoint is not needed for coordination,
+		// but start it anyway so the same binary works for manual testing.
+		go s.serveHTTP(addr)
 	}
 	// In local mode StartProtocol() is called explicitly by StartBenchmark().
 }
@@ -189,6 +193,7 @@ func (s *Server) serveHTTP(grpcAddr string) {
 	}
 	httpAddr := fmt.Sprintf(":%d", port+100)
 	mux := http.NewServeMux()
+	// /tx: add tx to local pool and block until finalized.
 	mux.HandleFunc("/tx", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {

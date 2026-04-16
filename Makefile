@@ -1,5 +1,29 @@
 .PHONY: proto docker clean eval setup local-up local-down deploy stop
 
+# Always export BENCH and CONF since they're required by all services.
+# For optional vars (THROUGHPUT, STEPS, etc.) only export when explicitly set
+# on the command line, so docker-compose can fall back to values in .env.
+CONF ?= local
+export BENCH CONF
+ifdef THROUGHPUT
+export THROUGHPUT
+endif
+ifdef STEPS
+export STEPS
+endif
+ifdef RUNS
+export RUNS
+endif
+ifdef DUR
+export DUR
+endif
+ifdef LOG
+export LOG
+endif
+ifdef PRODUCTION
+export PRODUCTION
+endif
+
 # --- NETWORK SETUP ---
 # For local testing
 network:
@@ -16,8 +40,14 @@ setup:
 docker:
 	docker compose up --build
 
+local-up:
+ifndef BENCH
+	$(error BENCH is not set. Example: make local-up BENCH=7 THROUGHPUT=1000 STEPS=1 RUNS=1 DUR=10)
+endif
+	docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+
 local-down:
-	docker compose down
+	docker compose -f docker-compose.yml -f docker-compose.local.yml down
 
 # --- DISTRIBUTED EXECUTION (Swarm) ---
 deploy:

@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 FROM golang:alpine
 
+RUN apk add --no-cache netcat-openbsd
+
 WORKDIR /app
 
 # 1. Copy the gorums dependency first into a folder named 'gorums'

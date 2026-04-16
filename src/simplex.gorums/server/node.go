@@ -58,8 +58,9 @@ type simplexNode struct {
 	proposedTxs map[uint64][]string
 
 	// In-process tx tracking for benchmark: txID → signal channel.
-	pendingTxMu sync.Mutex
-	pendingTxs  map[string]chan struct{}
+	pendingTxMu    sync.Mutex
+	pendingTxs     map[string]chan struct{}
+	finalizedTxSet map[string]struct{} // txs already finalized; prevents duplicate proposals
 }
 
 func newSimplexNode(id uint32, n int, cfg gorums.Configuration, privKey ed25519.PrivateKey, pubKeys map[uint32]ed25519.PublicKey) *simplexNode {
@@ -83,12 +84,19 @@ func newSimplexNode(id uint32, n int, cfg gorums.Configuration, privKey ed25519.
 		pendingProposals: make(map[uint64]*pb.ProposeMsg),
 		pendingVotes:     make(map[uint64][]*pb.VoteMsg),
 		pendingTxs:       make(map[string]chan struct{}),
+		finalizedTxSet:   make(map[string]struct{}),
 	}
 }
 
 // Start enters the first iteration.
 func (nd *simplexNode) Start() {
 	nd.mu.Lock()
+	// If the node already advanced past height 1 (e.g. due to receiving
+	// messages from peers before Start() was called), do not reset.
+	if nd.height > 1 {
+		nd.mu.Unlock()
+		return
+	}
 	proposal := nd.enterIterationLocked(1)
 	nd.mu.Unlock()
 	nd.sendProposal(proposal)
@@ -122,6 +130,23 @@ func (nd *simplexNode) addTxAndWait(ctx context.Context, tx string) error {
 
 	nd.AddTx(tx)
 
+	return nd.waitForTx(ctx, tx, ch)
+}
+
+// registerAndWait registers a pending channel for tx and waits for finalization
+// WITHOUT adding the tx to the local pool. Used when the tx is forwarded to the
+// leader so the leader's pool is the sole source of the tx.
+func (nd *simplexNode) registerAndWait(ctx context.Context, tx string) error {
+	ch := make(chan struct{}, 1)
+
+	nd.pendingTxMu.Lock()
+	nd.pendingTxs[tx] = ch
+	nd.pendingTxMu.Unlock()
+
+	return nd.waitForTx(ctx, tx, ch)
+}
+
+func (nd *simplexNode) waitForTx(ctx context.Context, tx string, ch chan struct{}) error {
 	select {
 	case <-ch:
 		return nil
@@ -144,6 +169,7 @@ func (nd *simplexNode) signalPendingTxs(txs []string) {
 	nd.pendingTxMu.Lock()
 	defer nd.pendingTxMu.Unlock()
 	for _, tx := range txs {
+		nd.finalizedTxSet[tx] = struct{}{}
 		if ch, ok := nd.pendingTxs[tx]; ok {
 			close(ch)
 			delete(nd.pendingTxs, tx)
@@ -156,6 +182,13 @@ func (nd *simplexNode) Height() uint64 {
 	nd.mu.Lock()
 	defer nd.mu.Unlock()
 	return nd.height
+}
+
+// CurrentLeader returns the node ID of the current iteration's leader.
+func (nd *simplexNode) CurrentLeader() uint32 {
+	nd.mu.Lock()
+	defer nd.mu.Unlock()
+	return leaderForHeight(nd.height, nd.n)
 }
 
 // FinalizedLog returns all confirmed transactions in height order.
@@ -184,12 +217,17 @@ func leaderForHeight(h uint64, n int) uint32 {
 	return uint32(idx%uint64(n)) + 1
 }
 
+// chainHash returns the parent-hash for a new block: the hash of the most
+// recent notarization only (O(1)). Using only the last entry keeps proposals
+// small regardless of chain length.
 func chainHash(chain []*pb.Notarization) string {
-	h := sha256.New()
-	for _, n := range chain {
-		b := n.GetBlock()
-		fmt.Fprintf(h, "%d|%s|%s|", b.GetHeight(), b.GetParentHash(), strings.Join(b.GetTxs(), ","))
+	if len(chain) == 0 {
+		return "genesis"
 	}
+	n := chain[len(chain)-1]
+	b := n.GetBlock()
+	h := sha256.New()
+	fmt.Fprintf(h, "%d|%s|%s|", b.GetHeight(), b.GetParentHash(), strings.Join(b.GetTxs(), ","))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
@@ -234,11 +272,22 @@ func (nd *simplexNode) enterIterationLocked(h uint64) (proposal *pb.ProposeMsg) 
 
 func (nd *simplexNode) buildProposalLocked(h uint64) *pb.ProposeMsg {
 	nd.txMu.Lock()
-	txs := nd.txPool
+	allTxs := nd.txPool
 	nd.txPool = nil
 	nd.txMu.Unlock()
 
-	// Save the drained txs so we can rescue them if a dummy block wins.
+	// Filter out txs already finalized by this node (e.g. forwarded duplicates)
+	// so they don't consume block space a second time.
+	nd.pendingTxMu.Lock()
+	txs := make([]string, 0, len(allTxs))
+	for _, tx := range allTxs {
+		if _, done := nd.finalizedTxSet[tx]; !done {
+			txs = append(txs, tx)
+		}
+	}
+	nd.pendingTxMu.Unlock()
+
+	// Save the filtered txs so we can rescue them if a dummy block wins.
 	if len(txs) > 0 {
 		nd.proposedTxs[h] = txs
 	}
@@ -250,13 +299,11 @@ func (nd *simplexNode) buildProposalLocked(h uint64) *pb.ProposeMsg {
 		Txs:        txs,
 	}.Build()
 
-	chain := make([]*pb.Notarization, len(nd.chain))
-	copy(chain, nd.chain)
-
+	// Do not include the full chain in proposals to avoid unbounded message
+	// growth. Receivers verify the parent hash against their own local chain.
 	return pb.ProposeMsg_builder{
 		Height:   h,
 		Block:    block,
-		Chain:    chain,
 		LeaderId: nd.id,
 	}.Build()
 }
@@ -283,15 +330,16 @@ func (nd *simplexNode) advanceFromHeight(h uint64, notarization *pb.Notarization
 		nd.chain = append(nd.chain, notarization)
 	}
 
-	chainSnapshot := make([]*pb.Notarization, len(nd.chain))
-	copy(chainSnapshot, nd.chain)
+	// Send only the new notarization so other nodes can advance one step.
+	// Using a single entry keeps the message constant-size.
+	newEntry := []*pb.Notarization{notarization}
 
 	proposal := nd.enterIterationLocked(h + 1)
 	nd.mu.Unlock()
 
 	nd.sendProposal(proposal)
 	nd.doSendFinalize(h)
-	nd.doSendNotarizedChain(chainSnapshot)
+	nd.doSendNotarizedChain(newEntry)
 }
 
 func (nd *simplexNode) processPendingLocked(h uint64) {
@@ -415,11 +463,11 @@ func (nd *simplexNode) handlePropose(req *pb.ProposeMsg) {
 		nd.mu.Unlock()
 		return
 	}
-	if uint64(len(req.GetChain())) != h-1 {
-		nd.mu.Unlock()
-		return
-	}
-	if req.GetBlock().GetParentHash() != chainHash(req.GetChain()) {
+	// Verify the parent hash against this node's own chain. The chain is
+	// intentionally not included in proposals (to bound message size) so
+	// we derive the expected hash locally.
+	expected := chainHash(nd.chain)
+	if req.GetBlock().GetParentHash() != expected {
 		nd.mu.Unlock()
 		return
 	}
@@ -537,8 +585,7 @@ func (nd *simplexNode) NotarizedChain(ctx gorums.ServerCtx, req *pb.NotarizedCha
 
 func (nd *simplexNode) handleNotarizedChain(req *pb.NotarizedChainMsg) {
 	incoming := req.GetChain()
-	incomingLen := uint64(len(incoming))
-	if incomingLen == 0 {
+	if len(incoming) == 0 {
 		return
 	}
 
@@ -557,32 +604,33 @@ func (nd *simplexNode) handleNotarizedChain(req *pb.NotarizedChainMsg) {
 		}
 	}
 
-	nd.mu.Lock()
-	if incomingLen <= uint64(len(nd.chain)) {
-		nd.mu.Unlock()
-		return
-	}
-	nd.chain = make([]*pb.Notarization, incomingLen)
-	copy(nd.chain, incoming)
-	startHeight := nd.height
-	nd.mu.Unlock()
+	// Process each incoming notarization as an incremental step.
+	// doSendNotarizedChain now sends a single new entry at a time, so
+	// we handle each entry independently rather than replacing the chain.
+	for _, notarization := range incoming {
+		bh := notarization.GetBlock().GetHeight()
 
-	for h := startHeight; h <= incomingLen; h++ {
 		nd.mu.Lock()
-		if nd.height != h {
+		if nd.height != bh {
 			nd.mu.Unlock()
-			break
+			continue
 		}
-		notarization := nd.chain[h-1]
+		// Append to chain at the correct position (chain is 0-indexed, bh is 1-indexed).
+		for uint64(len(nd.chain)) < bh-1 {
+			nd.chain = append(nd.chain, nil) // gap-fill (shouldn't occur in normal operation)
+		}
+		if uint64(len(nd.chain)) == bh-1 {
+			nd.chain = append(nd.chain, notarization)
+		}
 		var txsToFinalize []string
-		if _, already := nd.notarized[h]; !already {
-			nd.notarized[h] = notarization
-			txsToFinalize = nd.tryFinalizeLocked(h)
+		if _, already := nd.notarized[bh]; !already {
+			nd.notarized[bh] = notarization
+			txsToFinalize = nd.tryFinalizeLocked(bh)
 		}
 		nd.mu.Unlock()
 		if len(txsToFinalize) > 0 {
 			nd.signalPendingTxs(txsToFinalize)
 		}
-		nd.advanceFromHeight(h, notarization)
+		nd.advanceFromHeight(bh, notarization)
 	}
 }
