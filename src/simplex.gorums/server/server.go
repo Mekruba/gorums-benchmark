@@ -190,10 +190,11 @@ func (s *Server) Start(local bool) {
 // It listens on the gRPC port + 100. POST /tx <body> submits a transaction
 // and blocks until it is finalized (or the request context is cancelled).
 //
-// When this node is not the leader, the handler forwards the tx to the
-// current leader's HTTP endpoint so it enters the leader's proposal pool,
-// while registering a local wait channel so the response blocks until the
-// tx appears in a finalized block on this node.
+// Every node adds the tx to its local pool AND fire-and-forgets a copy to
+// the current leader so the tx gets proposed quickly. The local pool acts
+// as a fallback: when this node eventually becomes leader it will propose
+// any txs still pending.  buildProposalLocked filters out already-finalized
+// txs, so duplicates across pools are harmless.
 func (s *Server) serveHTTP(grpcAddr string) {
 	_, portStr, err := net.SplitHostPort(grpcAddr)
 	if err != nil {
@@ -218,7 +219,7 @@ func (s *Server) serveHTTP(grpcAddr string) {
 		nodeHTTP[n.ID] = fmt.Sprintf("http://%s:%d/tx", host, p+100)
 	}
 
-	forwardClient := &http.Client{Timeout: 14 * time.Second}
+	forwardClient := &http.Client{Timeout: 5 * time.Second}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/tx", func(w http.ResponseWriter, r *http.Request) {
@@ -228,36 +229,40 @@ func (s *Server) serveHTTP(grpcAddr string) {
 			return
 		}
 		tx := string(body)
-		leaderID := s.nd.CurrentLeader()
 
-		if leaderID == s.id {
-			// We are the leader: add to local pool and wait.
-			if err := s.nd.addTxAndWait(r.Context(), tx); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		// Not the leader: register a local wait (so we detect finalization)
-		// and forward the tx to the leader so it enters the leader's pool.
+		// Always add to local pool + wait.  This ensures the tx will be
+		// proposed when this node becomes leader, and signalPendingTxs
+		// will unblock the wait once ANY leader's block containing this
+		// tx is finalized on this node.
 		ch := make(chan struct{}, 1)
 		s.nd.pendingTxMu.Lock()
 		s.nd.pendingTxs[tx] = ch
 		s.nd.pendingTxMu.Unlock()
 
-		if url, ok := nodeHTTP[leaderID]; ok {
-			fwdReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, url, strings.NewReader(tx))
-			if err == nil {
-				resp, err := forwardClient.Do(fwdReq)
-				if err == nil {
+		s.nd.AddTx(tx)
+
+		// If we are not the leader, also fire-and-forget the tx to the
+		// leader so it enters the leader's pool for faster proposal.
+		leaderID := s.nd.CurrentLeader()
+		if leaderID != s.id {
+			if url, ok := nodeHTTP[leaderID]; ok {
+				go func() {
+					fwdCtx, fwdCancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer fwdCancel()
+					fwdReq, err := http.NewRequestWithContext(fwdCtx, http.MethodPost, url, strings.NewReader(tx))
+					if err != nil {
+						return
+					}
+					resp, err := forwardClient.Do(fwdReq)
+					if err != nil {
+						return
+					}
 					resp.Body.Close()
-				}
+				}()
 			}
 		}
 
-		// Wait for the tx to appear in a finalized block on this node.
+		// Block until the tx appears in a finalized block on this node.
 		if err := s.nd.waitForTx(r.Context(), tx, ch); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
