@@ -106,23 +106,21 @@ func (b *SimplexGorumsBenchmark) Run(c *simplexserver.Client, ctx context.Contex
 	tx := fmt.Sprintf("bm.%d", seq)
 
 	idx := int(seq-1) % len(b.nodes)
-	targetAddr := b.nodes[idx].Addr
 
-	// Walk forward to find a registered in-process server (local mode).
-	// In docker mode all lookups return nil; the client submits via gRPC instead.
+	// Local mode: find an in-process server and submit directly.
 	for i := range b.nodes {
 		tryAddr := b.nodes[(idx+i)%len(b.nodes)].Addr
 		srv := simplexserver.Lookup(tryAddr)
 		if srv != nil {
-			targetAddr = tryAddr
-			break
+			return srv.AddTxAndWait(ctx, tx)
 		}
 	}
 
-	srv := simplexserver.Lookup(targetAddr)
-	if srv != nil {
-		return srv.AddTxAndWait(ctx, tx)
-	}
-	// Docker mode: submit via the client's gRPC connection.
-	return c.Submit(ctx, tx, b.nodes[idx].ID)
+	// Docker/VM mode: submit all txs to node 1. In Simplex only the current
+	// leader can propose, so round-robining across all nodes causes txs to
+	// queue on non-leader nodes until they rotate into the leader slot,
+	// leading to timeouts at high throughput.  Concentrating txs on one node
+	// ensures they get proposed whenever that node is leader (~every 7th
+	// block) with the entire backlog in a single proposal.
+	return c.Submit(ctx, tx, b.nodes[0].ID)
 }

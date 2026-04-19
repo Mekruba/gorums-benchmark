@@ -189,12 +189,6 @@ func (s *Server) Start(local bool) {
 // serveHTTP starts a minimal HTTP server for external transaction injection.
 // It listens on the gRPC port + 100. POST /tx <body> submits a transaction
 // and blocks until it is finalized (or the request context is cancelled).
-//
-// Every node adds the tx to its local pool AND fire-and-forgets a copy to
-// the current leader so the tx gets proposed quickly. The local pool acts
-// as a fallback: when this node eventually becomes leader it will propose
-// any txs still pending.  buildProposalLocked filters out already-finalized
-// txs, so duplicates across pools are harmless.
 func (s *Server) serveHTTP(grpcAddr string) {
 	_, portStr, err := net.SplitHostPort(grpcAddr)
 	if err != nil {
@@ -207,20 +201,6 @@ func (s *Server) serveHTTP(grpcAddr string) {
 		return
 	}
 	httpAddr := fmt.Sprintf(":%d", port+100)
-
-	// Build a lookup from node ID to its HTTP tx endpoint.
-	nodeHTTP := make(map[uint32]string, len(s.nodes))
-	for _, n := range s.nodes {
-		host, ps, err := net.SplitHostPort(n.Addr)
-		if err != nil {
-			continue
-		}
-		p, _ := strconv.Atoi(ps)
-		nodeHTTP[n.ID] = fmt.Sprintf("http://%s:%d/tx", host, p+100)
-	}
-
-	forwardClient := &http.Client{Timeout: 5 * time.Second}
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("/tx", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
@@ -228,42 +208,7 @@ func (s *Server) serveHTTP(grpcAddr string) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		tx := string(body)
-
-		// Always add to local pool + wait.  This ensures the tx will be
-		// proposed when this node becomes leader, and signalPendingTxs
-		// will unblock the wait once ANY leader's block containing this
-		// tx is finalized on this node.
-		ch := make(chan struct{}, 1)
-		s.nd.pendingTxMu.Lock()
-		s.nd.pendingTxs[tx] = ch
-		s.nd.pendingTxMu.Unlock()
-
-		s.nd.AddTx(tx)
-
-		// If we are not the leader, also fire-and-forget the tx to the
-		// leader so it enters the leader's pool for faster proposal.
-		leaderID := s.nd.CurrentLeader()
-		if leaderID != s.id {
-			if url, ok := nodeHTTP[leaderID]; ok {
-				go func() {
-					fwdCtx, fwdCancel := context.WithTimeout(context.Background(), 5*time.Second)
-					defer fwdCancel()
-					fwdReq, err := http.NewRequestWithContext(fwdCtx, http.MethodPost, url, strings.NewReader(tx))
-					if err != nil {
-						return
-					}
-					resp, err := forwardClient.Do(fwdReq)
-					if err != nil {
-						return
-					}
-					resp.Body.Close()
-				}()
-			}
-		}
-
-		// Block until the tx appears in a finalized block on this node.
-		if err := s.nd.waitForTx(r.Context(), tx, ch); err != nil {
+		if err := s.nd.addTxAndWait(r.Context(), string(body)); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
