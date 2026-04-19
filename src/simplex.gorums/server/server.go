@@ -208,10 +208,14 @@ func (s *Server) serveHTTP(grpcAddr string) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err := s.nd.addTxAndWait(r.Context(), string(body)); err != nil {
+		tx := string(body)
+		slog.Info("DEBUG /tx: received", "node", s.id, "tx", tx)
+		if err := s.nd.addTxAndWait(r.Context(), tx); err != nil {
+			slog.Warn("DEBUG /tx: FAILED", "node", s.id, "tx", tx, "err", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		slog.Info("DEBUG /tx: SUCCESS", "node", s.id, "tx", tx)
 		w.WriteHeader(http.StatusOK)
 	})
 	if err := http.ListenAndServe(httpAddr, mux); err != nil && err != http.ErrServerClosed {

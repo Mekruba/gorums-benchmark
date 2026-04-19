@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/relab/gorums"
 	pb "github.com/Mekruba/gorums-benchmark/simplex.gorums/proto"
+	"github.com/relab/gorums"
 )
 
 // delta is the assumed upper bound on network message delay.
@@ -94,9 +94,11 @@ func (nd *simplexNode) Start() {
 	// If the node already advanced past height 1 (e.g. due to receiving
 	// messages from peers before Start() was called), do not reset.
 	if nd.height > 1 {
+		slog.Info("DEBUG Start: already past height 1", "node", nd.id, "height", nd.height)
 		nd.mu.Unlock()
 		return
 	}
+	slog.Info("DEBUG Start: entering iteration 1", "node", nd.id)
 	proposal := nd.enterIterationLocked(1)
 	nd.mu.Unlock()
 	nd.sendProposal(proposal)
@@ -126,11 +128,21 @@ func (nd *simplexNode) addTxAndWait(ctx context.Context, tx string) error {
 
 	nd.pendingTxMu.Lock()
 	nd.pendingTxs[tx] = ch
+	pendingCount := len(nd.pendingTxs)
 	nd.pendingTxMu.Unlock()
 
 	nd.AddTx(tx)
 
-	return nd.waitForTx(ctx, tx, ch)
+	nd.mu.Lock()
+	h := nd.height
+	nd.mu.Unlock()
+	slog.Info("DEBUG addTxAndWait: tx added", "node", nd.id, "tx", tx, "height", h, "pendingTxs", pendingCount, "poolSize", len(nd.txPool))
+
+	err := nd.waitForTx(ctx, tx, ch)
+	if err != nil {
+		slog.Warn("DEBUG addTxAndWait: tx FAILED", "node", nd.id, "tx", tx, "err", err)
+	}
+	return err
 }
 
 // registerAndWait registers a pending channel for tx and waits for finalization
@@ -168,13 +180,17 @@ func (nd *simplexNode) waitForTx(ctx context.Context, tx string, ch chan struct{
 func (nd *simplexNode) signalPendingTxs(txs []string) {
 	nd.pendingTxMu.Lock()
 	defer nd.pendingTxMu.Unlock()
+	matched := 0
 	for _, tx := range txs {
 		nd.finalizedTxSet[tx] = struct{}{}
 		if ch, ok := nd.pendingTxs[tx]; ok {
+			matched++
 			close(ch)
 			delete(nd.pendingTxs, tx)
 		}
 	}
+	remaining := len(nd.pendingTxs)
+	slog.Info("DEBUG signalPendingTxs", "node", nd.id, "finTxs", len(txs), "matched", matched, "remainingPending", remaining)
 }
 
 // Height returns the current iteration height.
@@ -248,6 +264,11 @@ func (nd *simplexNode) enterIterationLocked(h uint64) (proposal *pb.ProposeMsg) 
 	nd.height = h
 	nd.timerFired = false
 
+	leader := leaderForHeight(h, nd.n)
+	if h <= 5 || h%100 == 0 {
+		slog.Info("DEBUG enterIteration", "node", nd.id, "height", h, "leader", leader, "isLeader", leader == nd.id)
+	}
+
 	if nd.timer != nil {
 		nd.timer.Stop()
 	}
@@ -259,10 +280,13 @@ func (nd *simplexNode) enterIterationLocked(h uint64) (proposal *pb.ProposeMsg) 
 		}
 		nd.timerFired = true
 		nd.mu.Unlock()
+		if h <= 5 || h%100 == 0 {
+			slog.Info("DEBUG timer fired (dummy vote)", "node", nd.id, "height", h)
+		}
 		nd.doSendVote(h, pb.Block_builder{Height: h}.Build())
 	})
 
-	if leaderForHeight(h, nd.n) == nd.id {
+	if leader == nd.id {
 		proposal = nd.buildProposalLocked(h)
 	}
 
@@ -286,6 +310,8 @@ func (nd *simplexNode) buildProposalLocked(h uint64) *pb.ProposeMsg {
 		}
 	}
 	nd.pendingTxMu.Unlock()
+
+	slog.Info("DEBUG buildProposal", "node", nd.id, "height", h, "poolDrained", len(allTxs), "afterFilter", len(txs))
 
 	// Save the filtered txs so we can rescue them if a dummy block wins.
 	if len(txs) > 0 {
@@ -324,6 +350,10 @@ func (nd *simplexNode) advanceFromHeight(h uint64, notarization *pb.Notarization
 	if nd.height != h {
 		nd.mu.Unlock()
 		return
+	}
+
+	if h <= 5 || h%100 == 0 {
+		slog.Info("DEBUG advanceFromHeight", "node", nd.id, "fromHeight", h, "toHeight", h+1)
 	}
 
 	if uint64(len(nd.chain)) < h {
@@ -392,15 +422,19 @@ func (nd *simplexNode) tryFinalizeLocked(h uint64) []string {
 	if nd.finalized[h] {
 		return nil
 	}
-	if len(nd.finalizes[h]) < quorum(nd.n) {
+	finCount := len(nd.finalizes[h])
+	q := quorum(nd.n)
+	if finCount < q {
 		return nil
 	}
 	n, ok := nd.notarized[h]
 	if !ok {
+		slog.Info("DEBUG tryFinalize: have finalize quorum but no notarization", "node", nd.id, "height", h, "finCount", finCount)
 		return nil
 	}
 	nd.finalized[h] = true
 	if isDummyBlock(n.GetBlock()) {
+		slog.Info("DEBUG tryFinalize: dummy block finalized", "node", nd.id, "height", h)
 		// If this node was the leader and drained its pool for the proposal
 		// that lost to the dummy block, rescue those txs back into the pool.
 		if rescued, ok := nd.proposedTxs[h]; ok {
@@ -408,12 +442,14 @@ func (nd *simplexNode) tryFinalizeLocked(h uint64) []string {
 			nd.txMu.Lock()
 			nd.txPool = append(rescued, nd.txPool...)
 			nd.txMu.Unlock()
+			slog.Info("DEBUG tryFinalize: rescued txs from dummy", "node", nd.id, "height", h, "rescued", len(rescued))
 		}
 		return nil
 	}
 	delete(nd.proposedTxs, h)
 	txs := n.GetBlock().GetTxs()
 	nd.finalizedTxs[h] = txs
+	slog.Info("DEBUG tryFinalize: FINALIZED real block", "node", nd.id, "height", h, "numTxs", len(txs))
 	return txs
 }
 
@@ -468,6 +504,10 @@ func (nd *simplexNode) handlePropose(req *pb.ProposeMsg) {
 	// we derive the expected hash locally.
 	expected := chainHash(nd.chain)
 	if req.GetBlock().GetParentHash() != expected {
+		if h <= 5 {
+			slog.Warn("DEBUG handlePropose: parent hash mismatch", "node", nd.id, "height", h,
+				"expected", expected, "got", req.GetBlock().GetParentHash(), "leader", leaderID)
+		}
 		nd.mu.Unlock()
 		return
 	}
