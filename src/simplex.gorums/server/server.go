@@ -189,6 +189,11 @@ func (s *Server) Start(local bool) {
 // serveHTTP starts a minimal HTTP server for external transaction injection.
 // It listens on the gRPC port + 100. POST /tx <body> submits a transaction
 // and blocks until it is finalized (or the request context is cancelled).
+//
+// When this node is not the leader, the handler forwards the tx to the
+// current leader's HTTP endpoint so it enters the leader's proposal pool,
+// while registering a local wait channel so the response blocks until the
+// tx appears in a finalized block on this node.
 func (s *Server) serveHTTP(grpcAddr string) {
 	_, portStr, err := net.SplitHostPort(grpcAddr)
 	if err != nil {
@@ -201,15 +206,59 @@ func (s *Server) serveHTTP(grpcAddr string) {
 		return
 	}
 	httpAddr := fmt.Sprintf(":%d", port+100)
+
+	// Build a lookup from node ID to its HTTP tx endpoint.
+	nodeHTTP := make(map[uint32]string, len(s.nodes))
+	for _, n := range s.nodes {
+		host, ps, err := net.SplitHostPort(n.Addr)
+		if err != nil {
+			continue
+		}
+		p, _ := strconv.Atoi(ps)
+		nodeHTTP[n.ID] = fmt.Sprintf("http://%s:%d/tx", host, p+100)
+	}
+
+	forwardClient := &http.Client{Timeout: 14 * time.Second}
+
 	mux := http.NewServeMux()
-	// /tx: add tx to local pool and block until finalized.
 	mux.HandleFunc("/tx", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err := s.nd.addTxAndWait(r.Context(), string(body)); err != nil {
+		tx := string(body)
+		leaderID := s.nd.CurrentLeader()
+
+		if leaderID == s.id {
+			// We are the leader: add to local pool and wait.
+			if err := s.nd.addTxAndWait(r.Context(), tx); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Not the leader: register a local wait (so we detect finalization)
+		// and forward the tx to the leader so it enters the leader's pool.
+		ch := make(chan struct{}, 1)
+		s.nd.pendingTxMu.Lock()
+		s.nd.pendingTxs[tx] = ch
+		s.nd.pendingTxMu.Unlock()
+
+		if url, ok := nodeHTTP[leaderID]; ok {
+			fwdReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, url, strings.NewReader(tx))
+			if err == nil {
+				resp, err := forwardClient.Do(fwdReq)
+				if err == nil {
+					resp.Body.Close()
+				}
+			}
+		}
+
+		// Wait for the tx to appear in a finalized block on this node.
+		if err := s.nd.waitForTx(r.Context(), tx, ch); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
