@@ -3,14 +3,16 @@ package server
 import (
 	"context"
 	"fmt"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	"io"
 	"log"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 
 	pb "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/proto"
 	"github.com/relab/gorums"
@@ -34,7 +36,7 @@ func InitLogger(id uint32, verbose bool) {
 	var output io.Writer = os.Stderr
 	if verbose {
 		level = slog.LevelDebug
-		filename := fmt.Sprintf("logs/node-%d.log", id)
+		filename := fmt.Sprintf("node-%d.log", id)
 		file, err := os.Create(filename)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to create log file: %v\n", err)
@@ -76,7 +78,6 @@ func NewFromNodeInfo(id uint32, nodes []NodeInfo) *Server {
 // after Start should do so themselves (see RunServer / main.go docker mode).
 func (s *Server) Start(_ bool) {
 
-	InitLogger(s.id, true)
 	peerMap := make(map[uint32]NodeAddr)
 	for _, n := range s.nodes {
 		peerMap[n.ID] = NodeAddr{Addr_: n.Addr}
@@ -95,7 +96,13 @@ func (s *Server) Start(_ bool) {
 		log.Fatalf("server: node ID %d not found in peer list", s.id)
 	}
 
-	sys, err := gorums.NewSystem(addr,
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		log.Fatalf("server: bad addr %q: %v", addr, err)
+	}
+	listenAddr := ":" + port
+
+	sys, err := gorums.NewSystem(listenAddr,
 		gorums.WithServerOptions(
 			gorums.WithConfig(s.id, peerList),
 			gorums.WithBufferSizes(1024, 1024),
