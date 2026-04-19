@@ -46,8 +46,9 @@ type simplexNode struct {
 
 	finalizedTxs map[uint64][]string
 
-	pendingProposals map[uint64]*pb.ProposeMsg
-	pendingVotes     map[uint64][]*pb.VoteMsg
+	pendingProposals     map[uint64]*pb.ProposeMsg
+	pendingVotes         map[uint64][]*pb.VoteMsg
+	pendingNotarizations map[uint64]*pb.Notarization // buffered chain entries for future heights
 
 	txMu   sync.Mutex
 	txPool []string
@@ -66,25 +67,26 @@ type simplexNode struct {
 func newSimplexNode(id uint32, n int, cfg gorums.Configuration, privKey ed25519.PrivateKey, pubKeys map[uint32]ed25519.PublicKey) *simplexNode {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &simplexNode{
-		id:               id,
-		n:                n,
-		cfg:              cfg,
-		privKey:          privKey,
-		pubKeys:          pubKeys,
-		ctx:              ctx,
-		cancel:           cancel,
-		height:           1,
-		votes:            make(map[uint64]map[string][]*pb.VoteMsg),
-		voted:            make(map[uint64]bool),
-		finalizes:        make(map[uint64]map[uint32]bool),
-		finalized:        make(map[uint64]bool),
-		notarized:        make(map[uint64]*pb.Notarization),
-		finalizedTxs:     make(map[uint64][]string),
-		proposedTxs:      make(map[uint64][]string),
-		pendingProposals: make(map[uint64]*pb.ProposeMsg),
-		pendingVotes:     make(map[uint64][]*pb.VoteMsg),
-		pendingTxs:       make(map[string]chan struct{}),
-		finalizedTxSet:   make(map[string]struct{}),
+		id:                   id,
+		n:                    n,
+		cfg:                  cfg,
+		privKey:              privKey,
+		pubKeys:              pubKeys,
+		ctx:                  ctx,
+		cancel:               cancel,
+		height:               1,
+		votes:                make(map[uint64]map[string][]*pb.VoteMsg),
+		voted:                make(map[uint64]bool),
+		finalizes:            make(map[uint64]map[uint32]bool),
+		finalized:            make(map[uint64]bool),
+		notarized:            make(map[uint64]*pb.Notarization),
+		finalizedTxs:         make(map[uint64][]string),
+		proposedTxs:          make(map[uint64][]string),
+		pendingProposals:     make(map[uint64]*pb.ProposeMsg),
+		pendingVotes:         make(map[uint64][]*pb.VoteMsg),
+		pendingNotarizations: make(map[uint64]*pb.Notarization),
+		pendingTxs:           make(map[string]chan struct{}),
+		finalizedTxSet:       make(map[string]struct{}),
 	}
 }
 
@@ -128,19 +130,13 @@ func (nd *simplexNode) addTxAndWait(ctx context.Context, tx string) error {
 
 	nd.pendingTxMu.Lock()
 	nd.pendingTxs[tx] = ch
-	pendingCount := len(nd.pendingTxs)
 	nd.pendingTxMu.Unlock()
 
 	nd.AddTx(tx)
 
-	nd.mu.Lock()
-	h := nd.height
-	nd.mu.Unlock()
-	slog.Info("DEBUG addTxAndWait: tx added", "node", nd.id, "tx", tx, "height", h, "pendingTxs", pendingCount, "poolSize", len(nd.txPool))
-
 	err := nd.waitForTx(ctx, tx, ch)
 	if err != nil {
-		slog.Warn("DEBUG addTxAndWait: tx FAILED", "node", nd.id, "tx", tx, "err", err)
+		slog.Warn("DEBUG addTxAndWait: FAILED", "node", nd.id, "tx", tx, "err", err)
 	}
 	return err
 }
@@ -264,11 +260,6 @@ func (nd *simplexNode) enterIterationLocked(h uint64) (proposal *pb.ProposeMsg) 
 	nd.height = h
 	nd.timerFired = false
 
-	leader := leaderForHeight(h, nd.n)
-	if h <= 5 || h%100 == 0 {
-		slog.Info("DEBUG enterIteration", "node", nd.id, "height", h, "leader", leader, "isLeader", leader == nd.id)
-	}
-
 	if nd.timer != nil {
 		nd.timer.Stop()
 	}
@@ -280,13 +271,10 @@ func (nd *simplexNode) enterIterationLocked(h uint64) (proposal *pb.ProposeMsg) 
 		}
 		nd.timerFired = true
 		nd.mu.Unlock()
-		if h <= 5 || h%100 == 0 {
-			slog.Info("DEBUG timer fired (dummy vote)", "node", nd.id, "height", h)
-		}
 		nd.doSendVote(h, pb.Block_builder{Height: h}.Build())
 	})
 
-	if leader == nd.id {
+	if leaderForHeight(h, nd.n) == nd.id {
 		proposal = nd.buildProposalLocked(h)
 	}
 
@@ -311,7 +299,9 @@ func (nd *simplexNode) buildProposalLocked(h uint64) *pb.ProposeMsg {
 	}
 	nd.pendingTxMu.Unlock()
 
-	slog.Info("DEBUG buildProposal", "node", nd.id, "height", h, "poolDrained", len(allTxs), "afterFilter", len(txs))
+	if len(allTxs) > 0 {
+		slog.Info("DEBUG buildProposal", "node", nd.id, "height", h, "poolDrained", len(allTxs), "afterFilter", len(txs))
+	}
 
 	// Save the filtered txs so we can rescue them if a dummy block wins.
 	if len(txs) > 0 {
@@ -352,10 +342,6 @@ func (nd *simplexNode) advanceFromHeight(h uint64, notarization *pb.Notarization
 		return
 	}
 
-	if h <= 5 || h%100 == 0 {
-		slog.Info("DEBUG advanceFromHeight", "node", nd.id, "fromHeight", h, "toHeight", h+1)
-	}
-
 	if uint64(len(nd.chain)) < h {
 		nd.chain = append(nd.chain, notarization)
 	}
@@ -382,6 +368,10 @@ func (nd *simplexNode) processPendingLocked(h uint64) {
 		for _, v := range votes {
 			go nd.handleVote(v)
 		}
+	}
+	if nota, ok := nd.pendingNotarizations[h]; ok {
+		delete(nd.pendingNotarizations, h)
+		go nd.applyNotarization(h, nota)
 	}
 }
 
@@ -429,12 +419,10 @@ func (nd *simplexNode) tryFinalizeLocked(h uint64) []string {
 	}
 	n, ok := nd.notarized[h]
 	if !ok {
-		slog.Info("DEBUG tryFinalize: have finalize quorum but no notarization", "node", nd.id, "height", h, "finCount", finCount)
 		return nil
 	}
 	nd.finalized[h] = true
 	if isDummyBlock(n.GetBlock()) {
-		slog.Info("DEBUG tryFinalize: dummy block finalized", "node", nd.id, "height", h)
 		// If this node was the leader and drained its pool for the proposal
 		// that lost to the dummy block, rescue those txs back into the pool.
 		if rescued, ok := nd.proposedTxs[h]; ok {
@@ -442,14 +430,16 @@ func (nd *simplexNode) tryFinalizeLocked(h uint64) []string {
 			nd.txMu.Lock()
 			nd.txPool = append(rescued, nd.txPool...)
 			nd.txMu.Unlock()
-			slog.Info("DEBUG tryFinalize: rescued txs from dummy", "node", nd.id, "height", h, "rescued", len(rescued))
+			slog.Info("DEBUG tryFinalize: DUMMY rescued txs", "node", nd.id, "height", h, "rescued", len(rescued))
 		}
 		return nil
 	}
 	delete(nd.proposedTxs, h)
 	txs := n.GetBlock().GetTxs()
 	nd.finalizedTxs[h] = txs
-	slog.Info("DEBUG tryFinalize: FINALIZED real block", "node", nd.id, "height", h, "numTxs", len(txs))
+	if len(txs) > 0 {
+		slog.Info("DEBUG tryFinalize: FINALIZED with txs", "node", nd.id, "height", h, "numTxs", len(txs))
+	}
 	return txs
 }
 
@@ -504,10 +494,6 @@ func (nd *simplexNode) handlePropose(req *pb.ProposeMsg) {
 	// we derive the expected hash locally.
 	expected := chainHash(nd.chain)
 	if req.GetBlock().GetParentHash() != expected {
-		if h <= 5 {
-			slog.Warn("DEBUG handlePropose: parent hash mismatch", "node", nd.id, "height", h,
-				"expected", expected, "got", req.GetBlock().GetParentHash(), "leader", leaderID)
-		}
 		nd.mu.Unlock()
 		return
 	}
@@ -644,33 +630,43 @@ func (nd *simplexNode) handleNotarizedChain(req *pb.NotarizedChainMsg) {
 		}
 	}
 
-	// Process each incoming notarization as an incremental step.
-	// doSendNotarizedChain now sends a single new entry at a time, so
-	// we handle each entry independently rather than replacing the chain.
 	for _, notarization := range incoming {
 		bh := notarization.GetBlock().GetHeight()
+		nd.applyNotarization(bh, notarization)
+	}
+}
 
-		nd.mu.Lock()
-		if nd.height != bh {
-			nd.mu.Unlock()
-			continue
-		}
-		// Append to chain at the correct position (chain is 0-indexed, bh is 1-indexed).
-		for uint64(len(nd.chain)) < bh-1 {
-			nd.chain = append(nd.chain, nil) // gap-fill (shouldn't occur in normal operation)
-		}
-		if uint64(len(nd.chain)) == bh-1 {
-			nd.chain = append(nd.chain, notarization)
-		}
-		var txsToFinalize []string
-		if _, already := nd.notarized[bh]; !already {
-			nd.notarized[bh] = notarization
-			txsToFinalize = nd.tryFinalizeLocked(bh)
+// applyNotarization processes a single notarization entry. If the node is at
+// the matching height it applies it immediately; otherwise it buffers it.
+func (nd *simplexNode) applyNotarization(bh uint64, notarization *pb.Notarization) {
+	nd.mu.Lock()
+	if bh < nd.height {
+		nd.mu.Unlock()
+		return
+	}
+	if bh > nd.height {
+		// Buffer for later – processPendingLocked will pick it up.
+		if _, exists := nd.pendingNotarizations[bh]; !exists {
+			nd.pendingNotarizations[bh] = notarization
 		}
 		nd.mu.Unlock()
-		if len(txsToFinalize) > 0 {
-			nd.signalPendingTxs(txsToFinalize)
-		}
-		nd.advanceFromHeight(bh, notarization)
+		return
 	}
+	// bh == nd.height
+	for uint64(len(nd.chain)) < bh-1 {
+		nd.chain = append(nd.chain, nil)
+	}
+	if uint64(len(nd.chain)) == bh-1 {
+		nd.chain = append(nd.chain, notarization)
+	}
+	var txsToFinalize []string
+	if _, already := nd.notarized[bh]; !already {
+		nd.notarized[bh] = notarization
+		txsToFinalize = nd.tryFinalizeLocked(bh)
+	}
+	nd.mu.Unlock()
+	if len(txsToFinalize) > 0 {
+		nd.signalPendingTxs(txsToFinalize)
+	}
+	nd.advanceFromHeight(bh, notarization)
 }

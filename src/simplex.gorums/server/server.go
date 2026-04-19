@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -202,6 +203,9 @@ func (s *Server) serveHTTP(grpcAddr string) {
 	}
 	httpAddr := fmt.Sprintf(":%d", port+100)
 	mux := http.NewServeMux()
+	var txCount atomic.Int64
+	var txSuccess atomic.Int64
+	var txFail atomic.Int64
 	mux.HandleFunc("/tx", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -209,13 +213,22 @@ func (s *Server) serveHTTP(grpcAddr string) {
 			return
 		}
 		tx := string(body)
-		slog.Info("DEBUG /tx: received", "node", s.id, "tx", tx)
+		seq := txCount.Add(1)
+		if seq <= 3 {
+			slog.Info("DEBUG /tx: received", "node", s.id, "tx", tx, "seq", seq)
+		}
 		if err := s.nd.addTxAndWait(r.Context(), tx); err != nil {
-			slog.Warn("DEBUG /tx: FAILED", "node", s.id, "tx", tx, "err", err)
+			fails := txFail.Add(1)
+			if fails <= 10 || fails%100 == 0 {
+				slog.Warn("DEBUG /tx: FAILED", "node", s.id, "tx", tx, "err", err, "totalFails", fails, "totalReceived", seq)
+			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		slog.Info("DEBUG /tx: SUCCESS", "node", s.id, "tx", tx)
+		ok := txSuccess.Add(1)
+		if ok <= 5 || ok%100 == 0 {
+			slog.Info("DEBUG /tx: SUCCESS", "node", s.id, "tx", tx, "totalSuccess", ok)
+		}
 		w.WriteHeader(http.StatusOK)
 	})
 	if err := http.ListenAndServe(httpAddr, mux); err != nil && err != http.ErrServerClosed {
