@@ -306,9 +306,16 @@ type Client struct {
 
 // NewClient creates a Client for the given cluster nodes.
 func NewClient(nodes []NodeInfo) *Client {
+	transport := &http.Transport{
+		MaxIdleConns:        2000,
+		MaxIdleConnsPerHost: 2000,
+		MaxConnsPerHost:     0, // unlimited
+		IdleConnTimeout:     90 * time.Second,
+		DisableKeepAlives:   false,
+	}
 	return &Client{
 		nodes:  nodes,
-		httpCl: &http.Client{Timeout: 30 * time.Second},
+		httpCl: &http.Client{Timeout: 30 * time.Second, Transport: transport},
 	}
 }
 
