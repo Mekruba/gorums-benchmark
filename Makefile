@@ -1,28 +1,5 @@
 .PHONY: proto docker clean eval setup local-up local-down simplex-server simplex-client simplex-down deploy stop
 
-# Always export BENCH and CONF since they're required by all services.
-# For optional vars (THROUGHPUT, STEPS, etc.) only export when explicitly set
-# on the command line, so docker-compose can fall back to values in .env.
-CONF ?= local
-export BENCH CONF
-ifdef THROUGHPUT
-export THROUGHPUT
-endif
-ifdef STEPS
-export STEPS
-endif
-ifdef RUNS
-export RUNS
-endif
-ifdef DUR
-export DUR
-endif
-ifdef LOG
-export LOG
-endif
-ifdef PRODUCTION
-export PRODUCTION
-endif
 
 # --- NETWORK SETUP ---
 # For local testing
