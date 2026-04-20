@@ -12,12 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
-
 	pb "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/proto"
 	"github.com/relab/gorums"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // NodeInfo describes a cluster member.
@@ -127,23 +126,18 @@ func (s *Server) Start(_ bool) {
 		}
 	}()
 
-	for {
-		outbound := sys.OutboundConfig()
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		pb.Ping(outbound.Context(ctx), &emptypb.Empty{})
-		cancel()
+	time.Sleep(2 * time.Second)
 
-		connected := 0
-		for _, n := range outbound.Nodes() {
-			if n.LastErr() == nil {
-				connected++
-			}
-		}
-		if connected >= len(s.nodes) {
+	outbound := sys.OutboundConfig()
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, err := pb.Ping(outbound.Context(ctx), &emptypb.Empty{}).All()
+		cancel()
+		if err == nil {
 			slog.Info("all peers connected", "node", s.id)
 			break
 		}
-		slog.Info("waiting for peers", "node", s.id, "connected", connected, "expected", len(s.nodes))
+		slog.Info("waiting for peers", "node", s.id, "expected", len(s.nodes), "err", err)
 		time.Sleep(5 * time.Second)
 	}
 
