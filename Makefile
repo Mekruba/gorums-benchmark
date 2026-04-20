@@ -31,8 +31,8 @@ dist-srv:
 dist-client:
 	docker compose -f docker-compose.local.yml up client --build --no-deps
 
-# --- DISTRIBUTED PAXOS (host network, no swarm, 7 nodes) ---
-# On each node run: make paxos-srv ID=<1..7>
+# --- DISTRIBUTED PAXOS (host network, no swarm) ---
+# On each node run: make paxos-srv ID=<1..N>
 paxos-srv:
 	docker compose up srv$(ID) --build
 
@@ -41,6 +41,23 @@ paxos-srv:
 paxos-client:
 	mkdir -p csv logs
 	docker compose up client --build --no-deps
+
+# --- DYNAMIC COMPOSE GENERATION ---
+# Generate docker-compose with N servers:  make gen-compose N=3
+# Generate for local mode:                 make gen-compose N=3 MODE=local
+# Then use:  docker compose -f docker-compose.generated.yml up srv$(ID) --build
+N ?= 7
+MODE ?= paxos
+gen-compose:
+	./generate-compose.sh $(N) $(MODE)
+
+# Run server/client using the generated compose file
+gen-srv:
+	docker compose -f docker-compose.generated.yml up srv$(ID) --build
+
+gen-client:
+	mkdir -p csv logs
+	docker compose -f docker-compose.generated.yml up client --build --no-deps
 
 # --- DISTRIBUTED EXECUTION (Swarm) ---
 deploy:
