@@ -61,7 +61,12 @@ func main() {
 			ids[i] = n.ID
 		}
 		m := latency.MatrixFromIDs(ids)
+		fmt.Println("=== Full cluster ===")
 		m.Print()
+
+		best := m.BestSubsetMatrix(4)
+		fmt.Println("\n=== Best 4-node subset ===")
+		best.Print()
 
 	default:
 		printUsage()

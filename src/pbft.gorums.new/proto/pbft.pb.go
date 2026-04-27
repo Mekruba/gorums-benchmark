@@ -271,9 +271,9 @@ type PrePrepareMsg struct {
 	state                protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_View      uint32                 `protobuf:"varint,1,opt,name=view"`
 	xxx_hidden_Sequence  uint64                 `protobuf:"varint,2,opt,name=sequence"`
-	xxx_hidden_Digest    []byte                 `protobuf:"bytes,3,opt,name=digest"`
-	xxx_hidden_Request   *Request               `protobuf:"bytes,4,opt,name=request"`
-	xxx_hidden_Timestamp int64                  `protobuf:"varint,5,opt,name=timestamp"`
+	xxx_hidden_Timestamp int64                  `protobuf:"varint,3,opt,name=timestamp"`
+	xxx_hidden_Digest    []byte                 `protobuf:"bytes,4,opt,name=digest"`
+	xxx_hidden_Signature []byte                 `protobuf:"bytes,5,opt,name=signature"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -317,6 +317,13 @@ func (x *PrePrepareMsg) GetSequence() uint64 {
 	return 0
 }
 
+func (x *PrePrepareMsg) GetTimestamp() int64 {
+	if x != nil {
+		return x.xxx_hidden_Timestamp
+	}
+	return 0
+}
+
 func (x *PrePrepareMsg) GetDigest() []byte {
 	if x != nil {
 		return x.xxx_hidden_Digest
@@ -324,18 +331,11 @@ func (x *PrePrepareMsg) GetDigest() []byte {
 	return nil
 }
 
-func (x *PrePrepareMsg) GetRequest() *Request {
+func (x *PrePrepareMsg) GetSignature() []byte {
 	if x != nil {
-		return x.xxx_hidden_Request
+		return x.xxx_hidden_Signature
 	}
 	return nil
-}
-
-func (x *PrePrepareMsg) GetTimestamp() int64 {
-	if x != nil {
-		return x.xxx_hidden_Timestamp
-	}
-	return 0
 }
 
 func (x *PrePrepareMsg) SetView(v uint32) {
@@ -346,6 +346,10 @@ func (x *PrePrepareMsg) SetSequence(v uint64) {
 	x.xxx_hidden_Sequence = v
 }
 
+func (x *PrePrepareMsg) SetTimestamp(v int64) {
+	x.xxx_hidden_Timestamp = v
+}
+
 func (x *PrePrepareMsg) SetDigest(v []byte) {
 	if v == nil {
 		v = []byte{}
@@ -353,23 +357,11 @@ func (x *PrePrepareMsg) SetDigest(v []byte) {
 	x.xxx_hidden_Digest = v
 }
 
-func (x *PrePrepareMsg) SetRequest(v *Request) {
-	x.xxx_hidden_Request = v
-}
-
-func (x *PrePrepareMsg) SetTimestamp(v int64) {
-	x.xxx_hidden_Timestamp = v
-}
-
-func (x *PrePrepareMsg) HasRequest() bool {
-	if x == nil {
-		return false
+func (x *PrePrepareMsg) SetSignature(v []byte) {
+	if v == nil {
+		v = []byte{}
 	}
-	return x.xxx_hidden_Request != nil
-}
-
-func (x *PrePrepareMsg) ClearRequest() {
-	x.xxx_hidden_Request = nil
+	x.xxx_hidden_Signature = v
 }
 
 type PrePrepareMsg_builder struct {
@@ -377,9 +369,9 @@ type PrePrepareMsg_builder struct {
 
 	View      uint32
 	Sequence  uint64
-	Digest    []byte
-	Request   *Request
 	Timestamp int64
+	Digest    []byte
+	Signature []byte
 }
 
 func (b0 PrePrepareMsg_builder) Build() *PrePrepareMsg {
@@ -388,9 +380,9 @@ func (b0 PrePrepareMsg_builder) Build() *PrePrepareMsg {
 	_, _ = b, x
 	x.xxx_hidden_View = b.View
 	x.xxx_hidden_Sequence = b.Sequence
-	x.xxx_hidden_Digest = b.Digest
-	x.xxx_hidden_Request = b.Request
 	x.xxx_hidden_Timestamp = b.Timestamp
+	x.xxx_hidden_Digest = b.Digest
+	x.xxx_hidden_Signature = b.Signature
 	return m0
 }
 
@@ -400,8 +392,9 @@ type PrepareMsg struct {
 	state                protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_View      uint32                 `protobuf:"varint,1,opt,name=view"`
 	xxx_hidden_Sequence  uint64                 `protobuf:"varint,2,opt,name=sequence"`
-	xxx_hidden_Digest    []byte                 `protobuf:"bytes,3,opt,name=digest"`
-	xxx_hidden_ReplicaId uint32                 `protobuf:"varint,4,opt,name=replica_id,json=replicaId"`
+	xxx_hidden_ReplicaId uint32                 `protobuf:"varint,3,opt,name=replica_id,json=replicaId"`
+	xxx_hidden_Digest    []byte                 `protobuf:"bytes,4,opt,name=digest"`
+	xxx_hidden_Signature []byte                 `protobuf:"bytes,5,opt,name=signature"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -445,6 +438,13 @@ func (x *PrepareMsg) GetSequence() uint64 {
 	return 0
 }
 
+func (x *PrepareMsg) GetReplicaId() uint32 {
+	if x != nil {
+		return x.xxx_hidden_ReplicaId
+	}
+	return 0
+}
+
 func (x *PrepareMsg) GetDigest() []byte {
 	if x != nil {
 		return x.xxx_hidden_Digest
@@ -452,11 +452,11 @@ func (x *PrepareMsg) GetDigest() []byte {
 	return nil
 }
 
-func (x *PrepareMsg) GetReplicaId() uint32 {
+func (x *PrepareMsg) GetSignature() []byte {
 	if x != nil {
-		return x.xxx_hidden_ReplicaId
+		return x.xxx_hidden_Signature
 	}
-	return 0
+	return nil
 }
 
 func (x *PrepareMsg) SetView(v uint32) {
@@ -467,6 +467,10 @@ func (x *PrepareMsg) SetSequence(v uint64) {
 	x.xxx_hidden_Sequence = v
 }
 
+func (x *PrepareMsg) SetReplicaId(v uint32) {
+	x.xxx_hidden_ReplicaId = v
+}
+
 func (x *PrepareMsg) SetDigest(v []byte) {
 	if v == nil {
 		v = []byte{}
@@ -474,8 +478,11 @@ func (x *PrepareMsg) SetDigest(v []byte) {
 	x.xxx_hidden_Digest = v
 }
 
-func (x *PrepareMsg) SetReplicaId(v uint32) {
-	x.xxx_hidden_ReplicaId = v
+func (x *PrepareMsg) SetSignature(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Signature = v
 }
 
 type PrepareMsg_builder struct {
@@ -483,8 +490,9 @@ type PrepareMsg_builder struct {
 
 	View      uint32
 	Sequence  uint64
-	Digest    []byte
 	ReplicaId uint32
+	Digest    []byte
+	Signature []byte
 }
 
 func (b0 PrepareMsg_builder) Build() *PrepareMsg {
@@ -493,8 +501,9 @@ func (b0 PrepareMsg_builder) Build() *PrepareMsg {
 	_, _ = b, x
 	x.xxx_hidden_View = b.View
 	x.xxx_hidden_Sequence = b.Sequence
-	x.xxx_hidden_Digest = b.Digest
 	x.xxx_hidden_ReplicaId = b.ReplicaId
+	x.xxx_hidden_Digest = b.Digest
+	x.xxx_hidden_Signature = b.Signature
 	return m0
 }
 
@@ -504,8 +513,9 @@ type CommitMsg struct {
 	state                protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_View      uint32                 `protobuf:"varint,1,opt,name=view"`
 	xxx_hidden_Sequence  uint64                 `protobuf:"varint,2,opt,name=sequence"`
-	xxx_hidden_Digest    []byte                 `protobuf:"bytes,3,opt,name=digest"`
-	xxx_hidden_ReplicaId uint32                 `protobuf:"varint,4,opt,name=replica_id,json=replicaId"`
+	xxx_hidden_ReplicaId uint32                 `protobuf:"varint,3,opt,name=replica_id,json=replicaId"`
+	xxx_hidden_Digest    []byte                 `protobuf:"bytes,4,opt,name=digest"`
+	xxx_hidden_Signature []byte                 `protobuf:"bytes,5,opt,name=signature"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -549,6 +559,13 @@ func (x *CommitMsg) GetSequence() uint64 {
 	return 0
 }
 
+func (x *CommitMsg) GetReplicaId() uint32 {
+	if x != nil {
+		return x.xxx_hidden_ReplicaId
+	}
+	return 0
+}
+
 func (x *CommitMsg) GetDigest() []byte {
 	if x != nil {
 		return x.xxx_hidden_Digest
@@ -556,11 +573,11 @@ func (x *CommitMsg) GetDigest() []byte {
 	return nil
 }
 
-func (x *CommitMsg) GetReplicaId() uint32 {
+func (x *CommitMsg) GetSignature() []byte {
 	if x != nil {
-		return x.xxx_hidden_ReplicaId
+		return x.xxx_hidden_Signature
 	}
-	return 0
+	return nil
 }
 
 func (x *CommitMsg) SetView(v uint32) {
@@ -571,6 +588,10 @@ func (x *CommitMsg) SetSequence(v uint64) {
 	x.xxx_hidden_Sequence = v
 }
 
+func (x *CommitMsg) SetReplicaId(v uint32) {
+	x.xxx_hidden_ReplicaId = v
+}
+
 func (x *CommitMsg) SetDigest(v []byte) {
 	if v == nil {
 		v = []byte{}
@@ -578,8 +599,11 @@ func (x *CommitMsg) SetDigest(v []byte) {
 	x.xxx_hidden_Digest = v
 }
 
-func (x *CommitMsg) SetReplicaId(v uint32) {
-	x.xxx_hidden_ReplicaId = v
+func (x *CommitMsg) SetSignature(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Signature = v
 }
 
 type CommitMsg_builder struct {
@@ -587,8 +611,9 @@ type CommitMsg_builder struct {
 
 	View      uint32
 	Sequence  uint64
-	Digest    []byte
 	ReplicaId uint32
+	Digest    []byte
+	Signature []byte
 }
 
 func (b0 CommitMsg_builder) Build() *CommitMsg {
@@ -597,8 +622,457 @@ func (b0 CommitMsg_builder) Build() *CommitMsg {
 	_, _ = b, x
 	x.xxx_hidden_View = b.View
 	x.xxx_hidden_Sequence = b.Sequence
-	x.xxx_hidden_Digest = b.Digest
 	x.xxx_hidden_ReplicaId = b.ReplicaId
+	x.xxx_hidden_Digest = b.Digest
+	x.xxx_hidden_Signature = b.Signature
+	return m0
+}
+
+// Checkpoint message (Section 4.3)
+// <CHECKPOINT, n, d, i>
+type CheckpointMsg struct {
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Sequence  uint64                 `protobuf:"varint,1,opt,name=sequence"`
+	xxx_hidden_ReplicaId uint32                 `protobuf:"varint,2,opt,name=replica_id,json=replicaId"`
+	xxx_hidden_Digest    []byte                 `protobuf:"bytes,3,opt,name=digest"`
+	xxx_hidden_Signature []byte                 `protobuf:"bytes,4,opt,name=signature"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *CheckpointMsg) Reset() {
+	*x = CheckpointMsg{}
+	mi := &file_pbft_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckpointMsg) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckpointMsg) ProtoMessage() {}
+
+func (x *CheckpointMsg) ProtoReflect() protoreflect.Message {
+	mi := &file_pbft_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *CheckpointMsg) GetSequence() uint64 {
+	if x != nil {
+		return x.xxx_hidden_Sequence
+	}
+	return 0
+}
+
+func (x *CheckpointMsg) GetReplicaId() uint32 {
+	if x != nil {
+		return x.xxx_hidden_ReplicaId
+	}
+	return 0
+}
+
+func (x *CheckpointMsg) GetDigest() []byte {
+	if x != nil {
+		return x.xxx_hidden_Digest
+	}
+	return nil
+}
+
+func (x *CheckpointMsg) GetSignature() []byte {
+	if x != nil {
+		return x.xxx_hidden_Signature
+	}
+	return nil
+}
+
+func (x *CheckpointMsg) SetSequence(v uint64) {
+	x.xxx_hidden_Sequence = v
+}
+
+func (x *CheckpointMsg) SetReplicaId(v uint32) {
+	x.xxx_hidden_ReplicaId = v
+}
+
+func (x *CheckpointMsg) SetDigest(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Digest = v
+}
+
+func (x *CheckpointMsg) SetSignature(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Signature = v
+}
+
+type CheckpointMsg_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Sequence  uint64
+	ReplicaId uint32
+	Digest    []byte
+	Signature []byte
+}
+
+func (b0 CheckpointMsg_builder) Build() *CheckpointMsg {
+	m0 := &CheckpointMsg{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Sequence = b.Sequence
+	x.xxx_hidden_ReplicaId = b.ReplicaId
+	x.xxx_hidden_Digest = b.Digest
+	x.xxx_hidden_Signature = b.Signature
+	return m0
+}
+
+// View-change message (Section 4.4)
+// <VIEW-CHANGE, v+1, n, C, P, i>
+type ViewChangeMsg struct {
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NewView         uint32                 `protobuf:"varint,1,opt,name=new_view,json=newView"`
+	xxx_hidden_LastStableSeq   uint64                 `protobuf:"varint,2,opt,name=last_stable_seq,json=lastStableSeq"`
+	xxx_hidden_ReplicaId       uint32                 `protobuf:"varint,3,opt,name=replica_id,json=replicaId"`
+	xxx_hidden_CheckpointProof [][]byte               `protobuf:"bytes,4,rep,name=checkpoint_proof,json=checkpointProof"`
+	xxx_hidden_Prepared        *[]*PreparedSet        `protobuf:"bytes,5,rep,name=prepared"`
+	xxx_hidden_Signature       []byte                 `protobuf:"bytes,6,opt,name=signature"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
+}
+
+func (x *ViewChangeMsg) Reset() {
+	*x = ViewChangeMsg{}
+	mi := &file_pbft_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ViewChangeMsg) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ViewChangeMsg) ProtoMessage() {}
+
+func (x *ViewChangeMsg) ProtoReflect() protoreflect.Message {
+	mi := &file_pbft_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *ViewChangeMsg) GetNewView() uint32 {
+	if x != nil {
+		return x.xxx_hidden_NewView
+	}
+	return 0
+}
+
+func (x *ViewChangeMsg) GetLastStableSeq() uint64 {
+	if x != nil {
+		return x.xxx_hidden_LastStableSeq
+	}
+	return 0
+}
+
+func (x *ViewChangeMsg) GetReplicaId() uint32 {
+	if x != nil {
+		return x.xxx_hidden_ReplicaId
+	}
+	return 0
+}
+
+func (x *ViewChangeMsg) GetCheckpointProof() [][]byte {
+	if x != nil {
+		return x.xxx_hidden_CheckpointProof
+	}
+	return nil
+}
+
+func (x *ViewChangeMsg) GetPrepared() []*PreparedSet {
+	if x != nil {
+		if x.xxx_hidden_Prepared != nil {
+			return *x.xxx_hidden_Prepared
+		}
+	}
+	return nil
+}
+
+func (x *ViewChangeMsg) GetSignature() []byte {
+	if x != nil {
+		return x.xxx_hidden_Signature
+	}
+	return nil
+}
+
+func (x *ViewChangeMsg) SetNewView(v uint32) {
+	x.xxx_hidden_NewView = v
+}
+
+func (x *ViewChangeMsg) SetLastStableSeq(v uint64) {
+	x.xxx_hidden_LastStableSeq = v
+}
+
+func (x *ViewChangeMsg) SetReplicaId(v uint32) {
+	x.xxx_hidden_ReplicaId = v
+}
+
+func (x *ViewChangeMsg) SetCheckpointProof(v [][]byte) {
+	x.xxx_hidden_CheckpointProof = v
+}
+
+func (x *ViewChangeMsg) SetPrepared(v []*PreparedSet) {
+	x.xxx_hidden_Prepared = &v
+}
+
+func (x *ViewChangeMsg) SetSignature(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Signature = v
+}
+
+type ViewChangeMsg_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NewView         uint32
+	LastStableSeq   uint64
+	ReplicaId       uint32
+	CheckpointProof [][]byte
+	Prepared        []*PreparedSet
+	Signature       []byte
+}
+
+func (b0 ViewChangeMsg_builder) Build() *ViewChangeMsg {
+	m0 := &ViewChangeMsg{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NewView = b.NewView
+	x.xxx_hidden_LastStableSeq = b.LastStableSeq
+	x.xxx_hidden_ReplicaId = b.ReplicaId
+	x.xxx_hidden_CheckpointProof = b.CheckpointProof
+	x.xxx_hidden_Prepared = &b.Prepared
+	x.xxx_hidden_Signature = b.Signature
+	return m0
+}
+
+// New-view message (Section 4.4)
+// <NEW-VIEW, v+1, V, O>
+type NewViewMsg struct {
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_NewView     uint32                 `protobuf:"varint,1,opt,name=new_view,json=newView"`
+	xxx_hidden_ReplicaId   uint32                 `protobuf:"varint,2,opt,name=replica_id,json=replicaId"`
+	xxx_hidden_ViewChanges *[]*ViewChangeMsg      `protobuf:"bytes,3,rep,name=view_changes,json=viewChanges"`
+	xxx_hidden_PrePrepares *[]*PrePrepareMsg      `protobuf:"bytes,4,rep,name=pre_prepares,json=prePrepares"`
+	xxx_hidden_Signature   []byte                 `protobuf:"bytes,5,opt,name=signature"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *NewViewMsg) Reset() {
+	*x = NewViewMsg{}
+	mi := &file_pbft_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NewViewMsg) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NewViewMsg) ProtoMessage() {}
+
+func (x *NewViewMsg) ProtoReflect() protoreflect.Message {
+	mi := &file_pbft_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *NewViewMsg) GetNewView() uint32 {
+	if x != nil {
+		return x.xxx_hidden_NewView
+	}
+	return 0
+}
+
+func (x *NewViewMsg) GetReplicaId() uint32 {
+	if x != nil {
+		return x.xxx_hidden_ReplicaId
+	}
+	return 0
+}
+
+func (x *NewViewMsg) GetViewChanges() []*ViewChangeMsg {
+	if x != nil {
+		if x.xxx_hidden_ViewChanges != nil {
+			return *x.xxx_hidden_ViewChanges
+		}
+	}
+	return nil
+}
+
+func (x *NewViewMsg) GetPrePrepares() []*PrePrepareMsg {
+	if x != nil {
+		if x.xxx_hidden_PrePrepares != nil {
+			return *x.xxx_hidden_PrePrepares
+		}
+	}
+	return nil
+}
+
+func (x *NewViewMsg) GetSignature() []byte {
+	if x != nil {
+		return x.xxx_hidden_Signature
+	}
+	return nil
+}
+
+func (x *NewViewMsg) SetNewView(v uint32) {
+	x.xxx_hidden_NewView = v
+}
+
+func (x *NewViewMsg) SetReplicaId(v uint32) {
+	x.xxx_hidden_ReplicaId = v
+}
+
+func (x *NewViewMsg) SetViewChanges(v []*ViewChangeMsg) {
+	x.xxx_hidden_ViewChanges = &v
+}
+
+func (x *NewViewMsg) SetPrePrepares(v []*PrePrepareMsg) {
+	x.xxx_hidden_PrePrepares = &v
+}
+
+func (x *NewViewMsg) SetSignature(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Signature = v
+}
+
+type NewViewMsg_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	NewView     uint32
+	ReplicaId   uint32
+	ViewChanges []*ViewChangeMsg
+	PrePrepares []*PrePrepareMsg
+	Signature   []byte
+}
+
+func (b0 NewViewMsg_builder) Build() *NewViewMsg {
+	m0 := &NewViewMsg{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_NewView = b.NewView
+	x.xxx_hidden_ReplicaId = b.ReplicaId
+	x.xxx_hidden_ViewChanges = &b.ViewChanges
+	x.xxx_hidden_PrePrepares = &b.PrePrepares
+	x.xxx_hidden_Signature = b.Signature
+	return m0
+}
+
+// PreparedSet holds proof that a request prepared at a given sequence number
+type PreparedSet struct {
+	state                 protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_PrePrepare *PrePrepareMsg         `protobuf:"bytes,1,opt,name=pre_prepare,json=prePrepare"`
+	xxx_hidden_Prepares   *[]*PrepareMsg         `protobuf:"bytes,2,rep,name=prepares"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *PreparedSet) Reset() {
+	*x = PreparedSet{}
+	mi := &file_pbft_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreparedSet) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreparedSet) ProtoMessage() {}
+
+func (x *PreparedSet) ProtoReflect() protoreflect.Message {
+	mi := &file_pbft_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *PreparedSet) GetPrePrepare() *PrePrepareMsg {
+	if x != nil {
+		return x.xxx_hidden_PrePrepare
+	}
+	return nil
+}
+
+func (x *PreparedSet) GetPrepares() []*PrepareMsg {
+	if x != nil {
+		if x.xxx_hidden_Prepares != nil {
+			return *x.xxx_hidden_Prepares
+		}
+	}
+	return nil
+}
+
+func (x *PreparedSet) SetPrePrepare(v *PrePrepareMsg) {
+	x.xxx_hidden_PrePrepare = v
+}
+
+func (x *PreparedSet) SetPrepares(v []*PrepareMsg) {
+	x.xxx_hidden_Prepares = &v
+}
+
+func (x *PreparedSet) HasPrePrepare() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PrePrepare != nil
+}
+
+func (x *PreparedSet) ClearPrePrepare() {
+	x.xxx_hidden_PrePrepare = nil
+}
+
+type PreparedSet_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	PrePrepare *PrePrepareMsg
+	Prepares   []*PrepareMsg
+}
+
+func (b0 PreparedSet_builder) Build() *PreparedSet {
+	m0 := &PreparedSet{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PrePrepare = b.PrePrepare
+	x.xxx_hidden_Prepares = &b.Prepares
 	return m0
 }
 
@@ -618,41 +1092,71 @@ const file_pbft_proto_rawDesc = "" +
 	"\tclient_id\x18\x03 \x01(\rR\bclientId\x12\x1d\n" +
 	"\n" +
 	"replica_id\x18\x04 \x01(\rR\treplicaId\x12\x16\n" +
-	"\x06result\x18\x05 \x01(\tR\x06result\"\x9e\x01\n" +
+	"\x06result\x18\x05 \x01(\tR\x06result\"\x93\x01\n" +
 	"\rPrePrepareMsg\x12\x12\n" +
 	"\x04view\x18\x01 \x01(\rR\x04view\x12\x1a\n" +
-	"\bsequence\x18\x02 \x01(\x04R\bsequence\x12\x16\n" +
-	"\x06digest\x18\x03 \x01(\fR\x06digest\x12'\n" +
-	"\arequest\x18\x04 \x01(\v2\r.pbft.RequestR\arequest\x12\x1c\n" +
-	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\"s\n" +
+	"\bsequence\x18\x02 \x01(\x04R\bsequence\x12\x1c\n" +
+	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x12\x16\n" +
+	"\x06digest\x18\x04 \x01(\fR\x06digest\x12\x1c\n" +
+	"\tsignature\x18\x05 \x01(\fR\tsignature\"\x91\x01\n" +
 	"\n" +
 	"PrepareMsg\x12\x12\n" +
 	"\x04view\x18\x01 \x01(\rR\x04view\x12\x1a\n" +
-	"\bsequence\x18\x02 \x01(\x04R\bsequence\x12\x16\n" +
-	"\x06digest\x18\x03 \x01(\fR\x06digest\x12\x1d\n" +
+	"\bsequence\x18\x02 \x01(\x04R\bsequence\x12\x1d\n" +
 	"\n" +
-	"replica_id\x18\x04 \x01(\rR\treplicaId\"r\n" +
+	"replica_id\x18\x03 \x01(\rR\treplicaId\x12\x16\n" +
+	"\x06digest\x18\x04 \x01(\fR\x06digest\x12\x1c\n" +
+	"\tsignature\x18\x05 \x01(\fR\tsignature\"\x90\x01\n" +
 	"\tCommitMsg\x12\x12\n" +
 	"\x04view\x18\x01 \x01(\rR\x04view\x12\x1a\n" +
-	"\bsequence\x18\x02 \x01(\x04R\bsequence\x12\x16\n" +
-	"\x06digest\x18\x03 \x01(\fR\x06digest\x12\x1d\n" +
+	"\bsequence\x18\x02 \x01(\x04R\bsequence\x12\x1d\n" +
 	"\n" +
-	"replica_id\x18\x04 \x01(\rR\treplicaId* \n" +
+	"replica_id\x18\x03 \x01(\rR\treplicaId\x12\x16\n" +
+	"\x06digest\x18\x04 \x01(\fR\x06digest\x12\x1c\n" +
+	"\tsignature\x18\x05 \x01(\fR\tsignature\"\x80\x01\n" +
+	"\rCheckpointMsg\x12\x1a\n" +
+	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12\x1d\n" +
+	"\n" +
+	"replica_id\x18\x02 \x01(\rR\treplicaId\x12\x16\n" +
+	"\x06digest\x18\x03 \x01(\fR\x06digest\x12\x1c\n" +
+	"\tsignature\x18\x04 \x01(\fR\tsignature\"\xe9\x01\n" +
+	"\rViewChangeMsg\x12\x19\n" +
+	"\bnew_view\x18\x01 \x01(\rR\anewView\x12&\n" +
+	"\x0flast_stable_seq\x18\x02 \x01(\x04R\rlastStableSeq\x12\x1d\n" +
+	"\n" +
+	"replica_id\x18\x03 \x01(\rR\treplicaId\x12)\n" +
+	"\x10checkpoint_proof\x18\x04 \x03(\fR\x0fcheckpointProof\x12-\n" +
+	"\bprepared\x18\x05 \x03(\v2\x11.pbft.PreparedSetR\bprepared\x12\x1c\n" +
+	"\tsignature\x18\x06 \x01(\fR\tsignature\"\xd4\x01\n" +
+	"\n" +
+	"NewViewMsg\x12\x19\n" +
+	"\bnew_view\x18\x01 \x01(\rR\anewView\x12\x1d\n" +
+	"\n" +
+	"replica_id\x18\x02 \x01(\rR\treplicaId\x126\n" +
+	"\fview_changes\x18\x03 \x03(\v2\x13.pbft.ViewChangeMsgR\vviewChanges\x126\n" +
+	"\fpre_prepares\x18\x04 \x03(\v2\x13.pbft.PrePrepareMsgR\vprePrepares\x12\x1c\n" +
+	"\tsignature\x18\x05 \x01(\fR\tsignature\"q\n" +
+	"\vPreparedSet\x124\n" +
+	"\vpre_prepare\x18\x01 \x01(\v2\x13.pbft.PrePrepareMsgR\n" +
+	"prePrepare\x12,\n" +
+	"\bprepares\x18\x02 \x03(\v2\x10.pbft.PrepareMsgR\bprepares* \n" +
 	"\tOperation\x12\b\n" +
 	"\x04READ\x10\x00\x12\t\n" +
-	"\x05WRITE\x10\x012\xef\x02\n" +
+	"\x05WRITE\x10\x012\xb0\x03\n" +
 	"\x04PBFT\x121\n" +
 	"\rClientRequest\x12\r.pbft.Request\x1a\v.pbft.Reply\"\x04\xa0\xb5\x18\x01\x12?\n" +
 	"\n" +
 	"PrePrepare\x12\x13.pbft.PrePrepareMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x129\n" +
 	"\aPrepare\x12\x10.pbft.PrepareMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x127\n" +
-	"\x06Commit\x12\x0f.pbft.CommitMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12A\n" +
+	"\x06Commit\x12\x0f.pbft.CommitMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12?\n" +
+	"\n" +
+	"Checkpoint\x12\x13.pbft.CheckpointMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12A\n" +
 	"\tBenchmark\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12<\n" +
 	"\x04Ping\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\"\x04\xa0\xb5\x18\x01B\x11Z\n" +
 	"proto/pbft\x92\x03\x02\b\x02b\beditionsp\xe9\a"
 
 var file_pbft_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pbft_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_pbft_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_pbft_proto_goTypes = []any{
 	(Operation)(0),        // 0: pbft.Operation
 	(*Request)(nil),       // 1: pbft.Request
@@ -660,28 +1164,38 @@ var file_pbft_proto_goTypes = []any{
 	(*PrePrepareMsg)(nil), // 3: pbft.PrePrepareMsg
 	(*PrepareMsg)(nil),    // 4: pbft.PrepareMsg
 	(*CommitMsg)(nil),     // 5: pbft.CommitMsg
-	(*emptypb.Empty)(nil), // 6: google.protobuf.Empty
+	(*CheckpointMsg)(nil), // 6: pbft.CheckpointMsg
+	(*ViewChangeMsg)(nil), // 7: pbft.ViewChangeMsg
+	(*NewViewMsg)(nil),    // 8: pbft.NewViewMsg
+	(*PreparedSet)(nil),   // 9: pbft.PreparedSet
+	(*emptypb.Empty)(nil), // 10: google.protobuf.Empty
 }
 var file_pbft_proto_depIdxs = []int32{
-	0, // 0: pbft.Request.operation:type_name -> pbft.Operation
-	1, // 1: pbft.PrePrepareMsg.request:type_name -> pbft.Request
-	1, // 2: pbft.PBFT.ClientRequest:input_type -> pbft.Request
-	3, // 3: pbft.PBFT.PrePrepare:input_type -> pbft.PrePrepareMsg
-	4, // 4: pbft.PBFT.Prepare:input_type -> pbft.PrepareMsg
-	5, // 5: pbft.PBFT.Commit:input_type -> pbft.CommitMsg
-	6, // 6: pbft.PBFT.Benchmark:input_type -> google.protobuf.Empty
-	6, // 7: pbft.PBFT.Ping:input_type -> google.protobuf.Empty
-	2, // 8: pbft.PBFT.ClientRequest:output_type -> pbft.Reply
-	6, // 9: pbft.PBFT.PrePrepare:output_type -> google.protobuf.Empty
-	6, // 10: pbft.PBFT.Prepare:output_type -> google.protobuf.Empty
-	6, // 11: pbft.PBFT.Commit:output_type -> google.protobuf.Empty
-	6, // 12: pbft.PBFT.Benchmark:output_type -> google.protobuf.Empty
-	6, // 13: pbft.PBFT.Ping:output_type -> google.protobuf.Empty
-	8, // [8:14] is the sub-list for method output_type
-	2, // [2:8] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0,  // 0: pbft.Request.operation:type_name -> pbft.Operation
+	9,  // 1: pbft.ViewChangeMsg.prepared:type_name -> pbft.PreparedSet
+	7,  // 2: pbft.NewViewMsg.view_changes:type_name -> pbft.ViewChangeMsg
+	3,  // 3: pbft.NewViewMsg.pre_prepares:type_name -> pbft.PrePrepareMsg
+	3,  // 4: pbft.PreparedSet.pre_prepare:type_name -> pbft.PrePrepareMsg
+	4,  // 5: pbft.PreparedSet.prepares:type_name -> pbft.PrepareMsg
+	1,  // 6: pbft.PBFT.ClientRequest:input_type -> pbft.Request
+	3,  // 7: pbft.PBFT.PrePrepare:input_type -> pbft.PrePrepareMsg
+	4,  // 8: pbft.PBFT.Prepare:input_type -> pbft.PrepareMsg
+	5,  // 9: pbft.PBFT.Commit:input_type -> pbft.CommitMsg
+	6,  // 10: pbft.PBFT.Checkpoint:input_type -> pbft.CheckpointMsg
+	10, // 11: pbft.PBFT.Benchmark:input_type -> google.protobuf.Empty
+	10, // 12: pbft.PBFT.Ping:input_type -> google.protobuf.Empty
+	2,  // 13: pbft.PBFT.ClientRequest:output_type -> pbft.Reply
+	10, // 14: pbft.PBFT.PrePrepare:output_type -> google.protobuf.Empty
+	10, // 15: pbft.PBFT.Prepare:output_type -> google.protobuf.Empty
+	10, // 16: pbft.PBFT.Commit:output_type -> google.protobuf.Empty
+	10, // 17: pbft.PBFT.Checkpoint:output_type -> google.protobuf.Empty
+	10, // 18: pbft.PBFT.Benchmark:output_type -> google.protobuf.Empty
+	10, // 19: pbft.PBFT.Ping:output_type -> google.protobuf.Empty
+	13, // [13:20] is the sub-list for method output_type
+	6,  // [6:13] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_pbft_proto_init() }
@@ -695,7 +1209,7 @@ func file_pbft_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pbft_proto_rawDesc), len(file_pbft_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   5,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

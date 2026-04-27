@@ -114,6 +114,70 @@ func (m Matrix) Location(id uint32) string {
 	return m.locs[id-1]
 }
 
+// BestSubset returns the indices (0-based into the Matrix's locs slice) of the
+// k nodes whose induced submatrix has the lowest mean off-diagonal latency.
+// It exhaustively checks all C(n, k) subsets, which is fine for small n.
+func (m Matrix) BestSubset(k int) ([]int, time.Duration) {
+	n := len(m.lm)
+	if k <= 0 || k > n {
+		panic(fmt.Sprintf("k=%d is out of range [1, %d]", k, n))
+	}
+
+	bestMean := time.Duration(math.MaxInt64)
+	var bestSubset []int
+
+	// Enumerate all C(n,k) index combinations.
+	subset := make([]int, k)
+	var enumerate func(start, depth int)
+	enumerate = func(start, depth int) {
+		if depth == k {
+			mean := subsetMean(m.lm, subset)
+			if mean < bestMean {
+				bestMean = mean
+				bestSubset = append([]int(nil), subset...)
+			}
+			return
+		}
+		for i := start; i <= n-(k-depth); i++ {
+			subset[depth] = i
+			enumerate(i+1, depth+1)
+		}
+	}
+	enumerate(0, 0)
+
+	return bestSubset, bestMean
+}
+
+// subsetMean computes the mean off-diagonal latency for the submatrix
+// defined by the given row/col indices into lm.
+func subsetMean(lm [][]time.Duration, indices []int) time.Duration {
+	k := len(indices)
+	if k < 2 {
+		return 0
+	}
+	var total time.Duration
+	for _, i := range indices {
+		for _, j := range indices {
+			if i != j {
+				total += lm[i][j]
+			}
+		}
+	}
+	entries := k*k - k
+	return total / time.Duration(entries)
+}
+
+// BestSubsetMatrix returns a Matrix containing only the k nodes with the
+// lowest mean pairwise latency.
+func (m Matrix) BestSubsetMatrix(k int) Matrix {
+	indices, _ := m.BestSubset(k)
+	locs := make([]string, len(indices))
+	for i, idx := range indices {
+		locs[i] = m.locs[idx]
+	}
+	return MatrixFrom(locs)
+}
+
 // Enabled returns true if the matrix was initialised with locations.
 func (m Matrix) Enabled() bool {
 	return m.enabled

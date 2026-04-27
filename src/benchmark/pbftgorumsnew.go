@@ -38,6 +38,8 @@ func (b *PbftGorumsNewBenchmark) Init(opts RunOptions) {
 	if len(b.nodes) == 0 {
 		panic("pbftnew: no server addresses provided in RunOptions.srvAddrs")
 	}
+	pbftserver.InitKeys(len(opts.srvAddrs))
+
 	b.clients = make([]*pbftclient.Client, 0, opts.numClients)
 	createClients(b, opts)
 }

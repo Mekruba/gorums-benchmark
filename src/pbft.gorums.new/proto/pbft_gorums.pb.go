@@ -88,6 +88,23 @@ func Commit(ctx *ConfigContext, in *CommitMsg, opts ...gorums.CallOption) error 
 	return gorums.Multicast(ctx, in, "pbft.PBFT.Commit", opts...)
 }
 
+// // Replica broadcasts view-change to all replicas when primary seems faulty.
+//
+//	rpc ViewChange(ViewChangeMsg) returns (google.protobuf.Empty) {
+//	  option (gorums.multicast) = true;
+//	}
+//
+// // New primary multicasts new-view to all replicas after collecting 2f view-changes.
+//
+//	rpc NewView(NewViewMsg) returns (google.protobuf.Empty) {
+//	  option (gorums.multicast) = true;
+//	}
+//
+// Replica multicasts checkpoint to all replicas periodically.
+func Checkpoint(ctx *ConfigContext, in *CheckpointMsg, opts ...gorums.CallOption) error {
+	return gorums.Multicast(ctx, in, "pbft.PBFT.Checkpoint", opts...)
+}
+
 // Resets server state between benchmark steps.
 func Benchmark(ctx *ConfigContext, in *emptypb.Empty, opts ...gorums.CallOption) error {
 	return gorums.Multicast(ctx, in, "pbft.PBFT.Benchmark", opts...)
@@ -107,6 +124,7 @@ type PBFTServer interface {
 	PrePrepare(gorums.ServerCtx, *PrePrepareMsg)
 	Prepare(gorums.ServerCtx, *PrepareMsg)
 	Commit(gorums.ServerCtx, *CommitMsg)
+	Checkpoint(gorums.ServerCtx, *CheckpointMsg)
 	Benchmark(gorums.ServerCtx, *emptypb.Empty)
 	Ping(gorums.ServerCtx, *emptypb.Empty) (*emptypb.Empty, error)
 }
@@ -133,6 +151,11 @@ func RegisterPBFTServer(srv *gorums.Server, impl PBFTServer) {
 	srv.RegisterHandler("pbft.PBFT.Commit", func(ctx gorums.ServerCtx, in *gorums.Message) (*gorums.Message, error) {
 		req := gorums.AsProto[*CommitMsg](in)
 		impl.Commit(ctx, req)
+		return nil, nil
+	})
+	srv.RegisterHandler("pbft.PBFT.Checkpoint", func(ctx gorums.ServerCtx, in *gorums.Message) (*gorums.Message, error) {
+		req := gorums.AsProto[*CheckpointMsg](in)
+		impl.Checkpoint(ctx, req)
 		return nil, nil
 	})
 	srv.RegisterHandler("pbft.PBFT.Benchmark", func(ctx gorums.ServerCtx, in *gorums.Message) (*gorums.Message, error) {
