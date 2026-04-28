@@ -191,18 +191,22 @@ func runBenchmark(name string, clients ServerEntry, throughput, numClients, clie
 		logger := slog.New(handler)
 		options = append(options, bench.WithLogger(logger))
 	}
-	var srvAddresses []string
-	if !local {
-		options = append(options, bench.RunExternal())
-		if srvAddrs == nil {
-			fmt.Fprintln(os.Stderr, "Error: srvAddrs cannot be nil when not running locally")
-			os.Exit(1)
-		}
-		srvAddresses = make([]string, len(srvAddrs)+1)
+	// Build the server address slice from config in both local and non-local
+	// modes so RunBenchmark uses the configured cluster size instead of the
+	// default threeServers stub.
+	if srvAddrs == nil && !local {
+		fmt.Fprintln(os.Stderr, "Error: srvAddrs cannot be nil when not running locally")
+		os.Exit(1)
+	}
+	if len(srvAddrs) > 0 {
+		srvAddresses := make([]string, len(srvAddrs)+1)
 		for _, srv := range srvAddrs {
 			srvAddresses[srv.ID] = fmt.Sprintf("%s:%s", srv.Addr, srv.Port)
 		}
 		options = append(options, bench.WithSrvAddrs(srvAddresses))
+	}
+	if !local {
+		options = append(options, bench.RunExternal())
 	}
 	if numClients > 0 {
 		options = append(options, bench.NumClients(numClients))

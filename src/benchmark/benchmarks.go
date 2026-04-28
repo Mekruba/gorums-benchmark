@@ -1,6 +1,9 @@
 package bench
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 const (
 	PaxosBroadcastCall             string = "Paxos.BroadcastCall"
@@ -35,7 +38,10 @@ var benchTypes = map[string]benchStruct{
 			return runBenchmark(opts, bench.(*SimplexGorumsBenchmark))
 		},
 		init: func() initializable {
-			return &SimplexGorumsBenchmark{}
+			b := &SimplexGorumsBenchmark{}
+			b.SetInitialMembers([]uint32{1, 2, 3, 4})                    // start with 4 of the 7 nodes
+			b.SetReconfig(15*time.Second, []uint32{1, 2, 3, 4, 5, 6, 7}) // expand to all 7 after 15 s
+			return b
 		},
 	},
 }

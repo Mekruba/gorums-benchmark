@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -23,6 +24,7 @@ import (
 	"github.com/relab/gorums"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/proto"
 )
 
 // NodeInfo describes a cluster member.
@@ -97,10 +99,12 @@ func Lookup(addr string) *Server {
 
 // Server wraps a gorums system and the Simplex consensus node.
 type Server struct {
-	id    uint32
-	nodes []NodeInfo
-	sys   *gorums.System
-	nd    *simplexNode
+	id             uint32
+	nodes          []NodeInfo
+	initialMembers []uint32 // nil = all nodes active (default)
+	sys            *gorums.System
+	nd             *simplexNode
+	httpSrv        *http.Server // non-nil once serveHTTP is running
 }
 
 // New creates a Server ready to be started, following the same convention as
@@ -150,7 +154,7 @@ func (s *Server) Start(local bool) {
 	s.sys = sys
 
 	priv, pubs := getKeyPair(s.id)
-	nd := newSimplexNode(s.id, len(s.nodes), sys.OutboundConfig(), priv, pubs)
+	nd := newSimplexNode(s.id, sys.OutboundConfig(), s.initialMembers, priv, pubs)
 	s.nd = nd
 
 	sys.RegisterService(nil, func(gs *gorums.Server) {
@@ -231,13 +235,66 @@ func (s *Server) serveHTTP(grpcAddr string) {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	if err := http.ListenAndServe(httpAddr, mux); err != nil && err != http.ErrServerClosed {
+	mux.HandleFunc("/sync", func(w http.ResponseWriter, r *http.Request) {
+		// Returns the full notarized chain as a length-prefixed protobuf binary
+		// stream: [4-byte big-endian len][proto bytes] repeated per entry.
+		// For each entry we wrap in a NotarizedChainMsg so the decoder can
+		// reuse handleNotarizedChain on the receiving side.
+		chain := s.nd.GetChain()
+		w.Header().Set("Content-Type", "application/octet-stream")
+		var lenBuf [4]byte
+		for _, nota := range chain {
+			msg := pb.NotarizedChainMsg_builder{Chain: []*pb.Notarization{nota}}.Build()
+			data, encErr := proto.Marshal(msg)
+			if encErr != nil {
+				http.Error(w, encErr.Error(), http.StatusInternalServerError)
+				return
+			}
+			binary.BigEndian.PutUint32(lenBuf[:], uint32(len(data)))
+			w.Write(lenBuf[:])
+			w.Write(data)
+		}
+	})
+	mux.HandleFunc("/reconfigure", func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		parts := strings.Split(string(body), ",")
+		memberIDs := make([]uint32, 0, len(parts))
+		for _, p := range parts {
+			trimmed := strings.TrimSpace(p)
+			if trimmed == "" {
+				continue
+			}
+			v, convErr := strconv.ParseUint(trimmed, 10, 32)
+			if convErr != nil {
+				http.Error(w, fmt.Sprintf("invalid member ID %q", trimmed), http.StatusBadRequest)
+				return
+			}
+			memberIDs = append(memberIDs, uint32(v))
+		}
+		if err := s.ReconfigureAndWait(r.Context(), memberIDs); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	httpServer := &http.Server{Addr: httpAddr, Handler: mux}
+	s.httpSrv = httpServer
+	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Printf("simplex: HTTP server error: %v", err)
 	}
 }
 
 // Stop implements BenchmarkServer.
 func (s *Server) Stop() {
+	if s.httpSrv != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		s.httpSrv.Shutdown(ctx) //nolint:errcheck
+	}
 	if s.nd != nil {
 		s.nd.Stop()
 	}
@@ -258,10 +315,38 @@ func (s *Server) AddTxAndWait(ctx context.Context, tx string) error {
 	return s.nd.addTxAndWait(ctx, tx)
 }
 
+// ReconfigureAndWait submits a reconfiguration command transaction and blocks
+// until it is finalized by the cluster.
+func (s *Server) ReconfigureAndWait(ctx context.Context, members []uint32) error {
+	tx, err := buildReconfigTx(members)
+	if err != nil {
+		return err
+	}
+	return s.nd.addTxAndWait(ctx, tx)
+}
+
+// GetChain returns a snapshot of this server's notarized chain.
+func (s *Server) GetChain() []*pb.Notarization {
+	if s.nd == nil {
+		return nil
+	}
+	return s.nd.GetChain()
+}
+
 // StartServer starts a Simplex node in-process and returns immediately.
-// Used by the bench framework's CreateServer.
+// Used by the bench framework's CreateServer (all nodes active from the start).
 func StartServer(id uint32, nodes []NodeInfo) (*Server, error) {
 	s := &Server{id: id, nodes: nodes}
+	s.Start(true)
+	return s, nil
+}
+
+// StartServerWithInitialMembers starts a Simplex node where only the listed
+// node IDs participate in consensus initially. All nodes still connect to each
+// other via Gorums (for networking), but only the initial members propose,
+// vote, and finalize until a reconfiguration tx widens the active set.
+func StartServerWithInitialMembers(id uint32, nodes []NodeInfo, initialMembers []uint32) (*Server, error) {
+	s := &Server{id: id, nodes: nodes, initialMembers: initialMembers}
 	s.Start(true)
 	return s, nil
 }
@@ -356,6 +441,49 @@ func (c *Client) Submit(ctx context.Context, tx string, nodeID uint32) error {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("simplex: node %d error: %s", nodeID, body)
+	}
+	return nil
+}
+
+// Reconfigure submits a membership change to a node via HTTP and waits for it
+// to be finalized by consensus. Body format is comma-separated IDs (e.g. "1,2,3").
+func (c *Client) Reconfigure(ctx context.Context, members []uint32, nodeID uint32) error {
+	var addr string
+	for _, n := range c.nodes {
+		if n.ID == nodeID {
+			addr = n.Addr
+			break
+		}
+	}
+	if addr == "" {
+		return fmt.Errorf("simplex: unknown node %d", nodeID)
+	}
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("simplex: bad addr %s: %w", addr, err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return fmt.Errorf("simplex: bad port %s: %w", portStr, err)
+	}
+	tx, err := buildReconfigTx(members)
+	if err != nil {
+		return err
+	}
+	body := strings.TrimPrefix(tx, reconfigTxPrefix)
+	url := fmt.Sprintf("http://%s:%d/reconfigure", host, port+100)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpCl.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("simplex: node %d reconfigure error: %s", nodeID, respBody)
 	}
 	return nil
 }
