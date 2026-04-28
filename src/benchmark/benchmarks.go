@@ -3,6 +3,8 @@ package bench
 import (
 	"fmt"
 	"time"
+
+	simplexserver "github.com/Mekruba/gorums-benchmark/simplex.gorums/server"
 )
 
 const (
@@ -39,8 +41,15 @@ var benchTypes = map[string]benchStruct{
 		},
 		init: func() initializable {
 			b := &SimplexGorumsBenchmark{}
-			b.SetInitialMembers([]uint32{1, 2, 3, 4})                    // start with 4 of the 7 nodes
-			b.SetReconfig(15*time.Second, []uint32{1, 2, 3, 4, 5, 6, 7}) // expand to all 7 after 15 s
+			// Start with 4 active members; nodes 5–7 are standbys.
+			// The per-node failure detector will automatically promote a
+			// standby when an active member becomes unresponsive.
+			b.SetInitialMembers([]uint32{1, 2, 3, 4})
+			b.SetFailureDetector(simplexserver.FailureDetectorConfig{
+				ProbeInterval: 500 * time.Millisecond,
+				MissThreshold: 3, // declare failed after 1.5 s of silence
+				StandbyPool:   []uint32{5, 6, 7},
+			})
 			return b
 		},
 	},

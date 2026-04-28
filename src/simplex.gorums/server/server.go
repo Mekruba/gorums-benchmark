@@ -16,9 +16,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
+
+	"slices"
 
 	pb "github.com/Mekruba/gorums-benchmark/simplex.gorums/proto"
 	"github.com/relab/gorums"
@@ -97,6 +98,174 @@ func Lookup(addr string) *Server {
 
 // ─── Server ──────────────────────────────────────────────────────────────────
 
+// ─── Failure detector ────────────────────────────────────────────────────────
+
+// FailureDetectorConfig controls the behaviour of the per-node failure detector.
+// Each active member is probed every ProbeInterval. If a node misses
+// MissThreshold consecutive probes it is declared failed. The failed node is
+// replaced by the next available standby from StandbyPool (in order).
+// Only one node submits the reconfig tx at a time; duplicates are no-ops.
+type FailureDetectorConfig struct {
+	// ProbeInterval is the period between health checks (default 500ms).
+	ProbeInterval time.Duration
+	// MissThreshold is the number of consecutive missed probes before a node
+	// is declared failed (default 3, so 1.5s with 500ms interval).
+	MissThreshold int
+	// StandbyPool is the ordered list of node IDs to promote when a member
+	// fails. These nodes must be started and connected but are excluded from
+	// the initial active member set.
+	StandbyPool []uint32
+}
+
+// failureDetector runs on each node and probes the HTTP /sync endpoint of
+// every currently active member. When a node is detected as failed the
+// detector computes a new member set (remove failed, add next standby) and
+// submits a ReconfigureAndWait. ReconfigureAndWait is idempotent when the
+// member set is unchanged, so simultaneous submissions from multiple nodes
+// detecting the same failure converge safely.
+type failureDetector struct {
+	srv    *Server
+	cfg    FailureDetectorConfig
+	httpCl *http.Client
+	// missCount tracks consecutive missed probes per node ID.
+	missCount map[uint32]int
+	// standbyIdx is the index into cfg.StandbyPool of the next standby to promote.
+	standbyIdx int
+	ctx        context.Context
+	cancel     context.CancelFunc
+}
+
+func newFailureDetector(srv *Server, cfg FailureDetectorConfig) *failureDetector {
+	if cfg.ProbeInterval <= 0 {
+		cfg.ProbeInterval = 500 * time.Millisecond
+	}
+	if cfg.MissThreshold <= 0 {
+		cfg.MissThreshold = 3
+	}
+	// Probe timeout must be comfortably larger than ProbeInterval to avoid
+	// false positives under load. A slow but healthy node should still respond
+	// to the lightweight /health endpoint within a few seconds.
+	probeTimeout := cfg.ProbeInterval*4 + 2*time.Second
+	ctx, cancel := context.WithCancel(context.Background())
+	return &failureDetector{
+		srv:       srv,
+		cfg:       cfg,
+		httpCl:    &http.Client{Timeout: probeTimeout},
+		missCount: make(map[uint32]int),
+		ctx:       ctx,
+		cancel:    cancel,
+	}
+}
+
+func (fd *failureDetector) run() {
+	ticker := time.NewTicker(fd.cfg.ProbeInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-fd.ctx.Done():
+			return
+		case <-ticker.C:
+			fd.probe()
+		}
+	}
+}
+
+func (fd *failureDetector) probe() {
+	active := fd.srv.nd.Members()
+	for _, id := range active {
+		if id == fd.srv.id {
+			// Don't probe self — we know we're up.
+			fd.missCount[id] = 0
+			continue
+		}
+		addr := fd.addrForID(id)
+		if addr == "" {
+			continue
+		}
+		if fd.ping(addr) {
+			fd.missCount[id] = 0
+		} else {
+			fd.missCount[id]++
+			if fd.missCount[id] >= fd.cfg.MissThreshold {
+				slog.Warn("simplex: failure detector: node unresponsive, triggering reconfig",
+					"detector", fd.srv.id, "failed", id, "misses", fd.missCount[id])
+				fd.handleFailure(id, active)
+				return // re-probe next tick with updated membership
+			}
+		}
+	}
+}
+
+func (fd *failureDetector) handleFailure(failedID uint32, currentActive []uint32) {
+	// Build new member set: remove failed node, add next standby if available.
+	newMembers := make([]uint32, 0, len(currentActive))
+	for _, id := range currentActive {
+		if id != failedID {
+			newMembers = append(newMembers, id)
+		}
+	}
+	if fd.standbyIdx < len(fd.cfg.StandbyPool) {
+		newMembers = append(newMembers, fd.cfg.StandbyPool[fd.standbyIdx])
+		fd.standbyIdx++
+	}
+	if len(newMembers) == 0 {
+		slog.Warn("simplex: failure detector: new member set would be empty, skipping reconfig",
+			"detector", fd.srv.id)
+		return
+	}
+	slog.Info("simplex: failure detector: submitting reconfig",
+		"detector", fd.srv.id, "removed", failedID, "newMembers", newMembers)
+	// Reset miss counter so we don't re-trigger on the same node until a new
+	// probe cycle. The node is now removed from active membership anyway.
+	delete(fd.missCount, failedID)
+	ctx, cancel := context.WithTimeout(fd.ctx, 30*time.Second)
+	defer cancel()
+	if err := fd.srv.ReconfigureAndWait(ctx, newMembers); err != nil {
+		slog.Warn("simplex: failure detector: reconfig failed",
+			"detector", fd.srv.id, "err", err)
+	} else {
+		slog.Info("simplex: failure detector: reconfig committed",
+			"detector", fd.srv.id, "members", newMembers)
+	}
+}
+
+func (fd *failureDetector) ping(addr string) bool {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return false
+	}
+	// Use the lightweight /health endpoint so probes don't compete with
+	// heavy chain serialisation under load.
+	url := fmt.Sprintf("http://%s:%d/health", host, port+100)
+	req, err := http.NewRequestWithContext(fd.ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := fd.httpCl.Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+func (fd *failureDetector) addrForID(id uint32) string {
+	for _, n := range fd.srv.nodes {
+		if n.ID == id {
+			return n.Addr
+		}
+	}
+	return ""
+}
+
+func (fd *failureDetector) stop() {
+	fd.cancel()
+}
+
 // Server wraps a gorums system and the Simplex consensus node.
 type Server struct {
 	id             uint32
@@ -104,7 +273,9 @@ type Server struct {
 	initialMembers []uint32 // nil = all nodes active (default)
 	sys            *gorums.System
 	nd             *simplexNode
-	httpSrv        *http.Server // non-nil once serveHTTP is running
+	httpSrv        *http.Server           // non-nil once serveHTTP is running
+	fd             *failureDetector       // nil if not configured
+	fdCfg          *FailureDetectorConfig // non-nil if failure detection is enabled
 }
 
 // New creates a Server ready to be started, following the same convention as
@@ -180,7 +351,7 @@ func (s *Server) Start(local bool) {
 		go func() {
 			time.Sleep(5 * time.Second)
 			slog.Info("simplex: starting protocol", "node", s.id)
-			s.nd.Start()
+			s.StartProtocol() // also starts failure detector if configured
 			go s.serveHTTP(addr)
 		}()
 	} else {
@@ -207,9 +378,9 @@ func (s *Server) serveHTTP(grpcAddr string) {
 	}
 	httpAddr := fmt.Sprintf(":%d", port+100)
 	mux := http.NewServeMux()
-	var txCount atomic.Int64
-	var txSuccess atomic.Int64
-	var txFail atomic.Int64
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	mux.HandleFunc("/tx", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -217,21 +388,9 @@ func (s *Server) serveHTTP(grpcAddr string) {
 			return
 		}
 		tx := string(body)
-		seq := txCount.Add(1)
-		if seq <= 3 {
-			slog.Info("DEBUG /tx: received", "node", s.id, "tx", tx, "seq", seq)
-		}
 		if err := s.nd.addTxAndWait(r.Context(), tx); err != nil {
-			fails := txFail.Add(1)
-			if fails <= 10 || fails%100 == 0 {
-				slog.Warn("DEBUG /tx: FAILED", "node", s.id, "tx", tx, "err", err, "totalFails", fails, "totalReceived", seq)
-			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
-		}
-		ok := txSuccess.Add(1)
-		if ok <= 5 || ok%100 == 0 {
-			slog.Info("DEBUG /tx: SUCCESS", "node", s.id, "tx", tx, "totalSuccess", ok)
 		}
 		w.WriteHeader(http.StatusOK)
 	})
@@ -290,6 +449,9 @@ func (s *Server) serveHTTP(grpcAddr string) {
 
 // Stop implements BenchmarkServer.
 func (s *Server) Stop() {
+	if s.fd != nil {
+		s.fd.stop()
+	}
 	if s.httpSrv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -305,8 +467,31 @@ func (s *Server) Stop() {
 
 // StartProtocol starts the Simplex consensus protocol on this node.
 // It must be called after all peer servers are listening.
+// If a failure detector was configured via EnableFailureDetector it is
+// also started here, after a short warm-up delay.
 func (s *Server) StartProtocol() {
 	s.nd.Start()
+	if s.fdCfg != nil {
+		s.fd = newFailureDetector(s, *s.fdCfg)
+		// Short warm-up: let the cluster run for a full probe interval before
+		// the detector starts issuing probes, to avoid false positives at boot.
+		go func() {
+			time.Sleep(s.fdCfg.ProbeInterval * 3)
+			slog.Info("simplex: failure detector started", "node", s.id,
+				"probe_interval", s.fdCfg.ProbeInterval,
+				"miss_threshold", s.fdCfg.MissThreshold,
+				"standbys", s.fdCfg.StandbyPool)
+			s.fd.run()
+		}()
+	}
+}
+
+// EnableFailureDetector configures the failure detector. Must be called before
+// StartProtocol. When a member fails (misses MissThreshold consecutive health
+// checks), the detector submits a reconfig tx that removes the failed node and
+// promotes the next standby from StandbyPool.
+func (s *Server) EnableFailureDetector(cfg FailureDetectorConfig) {
+	s.fdCfg = &cfg
 }
 
 // AddTxAndWait submits a transaction directly to this node's pool and
@@ -316,13 +501,38 @@ func (s *Server) AddTxAndWait(ctx context.Context, tx string) error {
 }
 
 // ReconfigureAndWait submits a reconfiguration command transaction and blocks
-// until it is finalized by the cluster.
+// until it is finalized by the cluster. It is a no-op if the proposed member
+// set is identical to the current active membership (deduplicates concurrent
+// reconfig submissions from multiple nodes detecting the same failure).
 func (s *Server) ReconfigureAndWait(ctx context.Context, members []uint32) error {
+	// Deduplicate: if the cluster already has exactly this member set, skip.
+	sorted := slices.Clone(members)
+	slices.Sort(sorted)
+	current := s.nd.Members()
+	slices.Sort(current)
+	if slices.Equal(sorted, current) {
+		slog.Info("simplex: reconfig no-op, membership unchanged", "node", s.id, "members", sorted)
+		return nil
+	}
 	tx, err := buildReconfigTx(members)
 	if err != nil {
 		return err
 	}
 	return s.nd.addTxAndWait(ctx, tx)
+}
+
+// ID returns this server's node ID.
+func (s *Server) ID() uint32 {
+	return s.id
+}
+
+// Members returns the current active consensus member IDs for this node.
+// Safe to call concurrently. Returns nil before the protocol has started.
+func (s *Server) Members() []uint32 {
+	if s.nd == nil {
+		return nil
+	}
+	return s.nd.Members()
 }
 
 // GetChain returns a snapshot of this server's notarized chain.
@@ -347,6 +557,24 @@ func StartServer(id uint32, nodes []NodeInfo) (*Server, error) {
 // vote, and finalize until a reconfiguration tx widens the active set.
 func StartServerWithInitialMembers(id uint32, nodes []NodeInfo, initialMembers []uint32) (*Server, error) {
 	s := &Server{id: id, nodes: nodes, initialMembers: initialMembers}
+	s.Start(true)
+	return s, nil
+}
+
+// StartServerWithFailureDetector starts a node with an initial member set and
+// enables automatic failure detection. failedNodes will be replaced from
+// standbys when they stop responding.
+//
+//	Example — start with 4 active, standbys 5,6,7, auto-replace on failure:
+//	  srv, _ := StartServerWithFailureDetector(id, nodes,
+//	      []uint32{1,2,3,4},
+//	      FailureDetectorConfig{
+//	          ProbeInterval: 500*time.Millisecond,
+//	          MissThreshold: 3,
+//	          StandbyPool:   []uint32{5, 6, 7},
+//	      })
+func StartServerWithFailureDetector(id uint32, nodes []NodeInfo, initialMembers []uint32, fdCfg FailureDetectorConfig) (*Server, error) {
+	s := &Server{id: id, nodes: nodes, initialMembers: initialMembers, fdCfg: &fdCfg}
 	s.Start(true)
 	return s, nil
 }

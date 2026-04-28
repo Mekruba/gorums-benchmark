@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -43,6 +44,7 @@ type SimplexGorumsBenchmark struct {
 	initialMembers  []uint32      // nil = all nodes active
 	reconfigAfter   time.Duration // 0 = no reconfig
 	reconfigMembers []uint32
+	fdCfg           *simplexserver.FailureDetectorConfig // nil = detector disabled
 }
 
 // SetInitialMembers configures which node IDs form the initial consensus set.
@@ -62,6 +64,15 @@ func (b *SimplexGorumsBenchmark) SetInitialMembers(members []uint32) {
 func (b *SimplexGorumsBenchmark) SetReconfig(afterDur time.Duration, newMembers []uint32) {
 	b.reconfigAfter = afterDur
 	b.reconfigMembers = newMembers
+}
+
+// SetFailureDetector enables automatic failure detection and recovery.
+// Each active member is probed every cfg.ProbeInterval; if MissThreshold
+// consecutive probes fail, the node is removed and the next standby from
+// cfg.StandbyPool is promoted. All running nodes independently detect failures;
+// duplicate reconfig submissions are no-ops. Must be called before Init.
+func (b *SimplexGorumsBenchmark) SetFailureDetector(cfg simplexserver.FailureDetectorConfig) {
+	b.fdCfg = &cfg
 }
 
 func (b *SimplexGorumsBenchmark) CreateServer(addr string, srvAddrs []string) (*simplexserver.Server, func(), error) {
@@ -84,9 +95,13 @@ func (b *SimplexGorumsBenchmark) CreateServer(addr string, srvAddrs []string) (*
 	}
 	var srv *simplexserver.Server
 	var err error
-	if len(b.initialMembers) > 0 {
+	switch {
+	case b.fdCfg != nil:
+		// Failure detector mode: start with initial members + detector config.
+		srv, err = simplexserver.StartServerWithFailureDetector(id, nodes, b.initialMembers, *b.fdCfg)
+	case len(b.initialMembers) > 0:
 		srv, err = simplexserver.StartServerWithInitialMembers(id, nodes, b.initialMembers)
-	} else {
+	default:
 		srv, err = simplexserver.StartServer(id, nodes)
 	}
 	if err != nil {
@@ -136,9 +151,13 @@ func (b *SimplexGorumsBenchmark) StartBenchmark(_ *simplexserver.Client) []Resul
 	for _, n := range b.nodes {
 		if srv := simplexserver.Lookup(n.Addr); srv != nil {
 			anyLocal = true
-			time.Sleep(1500 * time.Millisecond) // let gorums connections settle
 			srv.StartProtocol()
 		}
+	}
+	if anyLocal {
+		// Single wait after all protocols are started to let gorums connections
+		// settle and the first few consensus rounds complete before txs arrive.
+		time.Sleep(2 * time.Second)
 	}
 
 	if !anyLocal {
@@ -229,13 +248,19 @@ func (b *SimplexGorumsBenchmark) Run(c *simplexserver.Client, ctx context.Contex
 
 	idx := int(seq-1) % len(b.nodes)
 
-	// Local mode: find an in-process server and submit directly.
+	// Local mode: only submit to an active consensus member.
+	// Submitting to a standby node causes the tx to sit in the pool forever
+	// (standbys never propose), leading to context deadline exceeded.
 	for i := range b.nodes {
 		tryAddr := b.nodes[(idx+i)%len(b.nodes)].Addr
 		srv := simplexserver.Lookup(tryAddr)
-		if srv != nil {
-			return srv.AddTxAndWait(ctx, tx)
+		if srv == nil {
+			continue
 		}
+		if !slices.Contains(srv.Members(), srv.ID()) {
+			continue
+		}
+		return srv.AddTxAndWait(ctx, tx)
 	}
 
 	// Docker/VM mode: submit all txs to node 1. In Simplex only the current

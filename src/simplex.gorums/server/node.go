@@ -121,11 +121,10 @@ func (nd *simplexNode) Start() {
 	// If the node already advanced past height 1 (e.g. due to receiving
 	// messages from peers before Start() was called), do not reset.
 	if nd.height > 1 {
-		slog.Info("DEBUG Start: already past height 1", "node", nd.id, "height", nd.height)
 		nd.mu.Unlock()
 		return
 	}
-	slog.Info("DEBUG Start: entering iteration 1", "node", nd.id)
+	slog.Info("simplex: starting protocol", "node", nd.id)
 	proposal := nd.enterIterationLocked(1)
 	nd.mu.Unlock()
 	nd.sendProposal(proposal)
@@ -160,9 +159,6 @@ func (nd *simplexNode) addTxAndWait(ctx context.Context, tx string) error {
 	nd.AddTx(tx)
 
 	err := nd.waitForTx(ctx, tx, ch)
-	if err != nil {
-		slog.Warn("DEBUG addTxAndWait: FAILED", "node", nd.id, "tx", tx, "err", err)
-	}
 	return err
 }
 
@@ -201,17 +197,13 @@ func (nd *simplexNode) waitForTx(ctx context.Context, tx string, ch chan struct{
 func (nd *simplexNode) signalPendingTxs(txs []string) {
 	nd.pendingTxMu.Lock()
 	defer nd.pendingTxMu.Unlock()
-	matched := 0
 	for _, tx := range txs {
 		nd.finalizedTxSet[tx] = struct{}{}
 		if ch, ok := nd.pendingTxs[tx]; ok {
-			matched++
 			close(ch)
 			delete(nd.pendingTxs, tx)
 		}
 	}
-	remaining := len(nd.pendingTxs)
-	slog.Info("DEBUG signalPendingTxs", "node", nd.id, "finTxs", len(txs), "matched", matched, "remainingPending", remaining)
 }
 
 // Height returns the current iteration height.
@@ -226,6 +218,13 @@ func (nd *simplexNode) CurrentLeader() uint32 {
 	nd.mu.Lock()
 	defer nd.mu.Unlock()
 	return leaderForHeight(nd.height, nd.members)
+}
+
+// Members returns a snapshot of the current active member IDs.
+func (nd *simplexNode) Members() []uint32 {
+	nd.mu.Lock()
+	defer nd.mu.Unlock()
+	return slices.Clone(nd.members)
 }
 
 // FinalizedLog returns all confirmed transactions in height order.
@@ -476,7 +475,7 @@ func (nd *simplexNode) buildProposalLocked(h uint64) *pb.ProposeMsg {
 	nd.pendingTxMu.Unlock()
 
 	if len(allTxs) > 0 {
-		slog.Info("DEBUG buildProposal", "node", nd.id, "height", h, "poolDrained", len(allTxs), "afterFilter", len(txs))
+		slog.Debug("simplex: buildProposal", "node", nd.id, "height", h, "pool", len(allTxs), "proposed", len(txs))
 	}
 
 	// Save the filtered txs so we can rescue them if a dummy block wins.
@@ -673,7 +672,6 @@ func (nd *simplexNode) tryFinalizeLocked(h uint64) []string {
 			nd.txMu.Lock()
 			nd.txPool = append(rescued, nd.txPool...)
 			nd.txMu.Unlock()
-			slog.Info("DEBUG tryFinalize: DUMMY rescued txs", "node", nd.id, "height", h, "rescued", len(rescued))
 		}
 		return nil
 	}
@@ -681,11 +679,6 @@ func (nd *simplexNode) tryFinalizeLocked(h uint64) []string {
 	txs := n.GetBlock().GetTxs()
 	nd.finalizedTxs[h] = txs
 	// Note: reconfiguration txs are applied in advanceFromHeight, not here.
-	// Applying them here would race with advanceFromHeight which may have
-	// already entered h+1 (the late-finalize path), causing split-brain.
-	if len(txs) > 0 {
-		slog.Info("DEBUG tryFinalize: FINALIZED with txs", "node", nd.id, "height", h, "numTxs", len(txs))
-	}
 	return txs
 }
 
