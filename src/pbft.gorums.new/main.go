@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 
 	"github.com/Mekruba/gorums-benchmark/pbft.gorums.new/client"
 	"github.com/Mekruba/gorums-benchmark/pbft.gorums.new/latency"
@@ -16,15 +17,18 @@ var nodes = []server.NodeInfo{
 	{ID: 2, Addr: "localhost:8081"},
 	{ID: 3, Addr: "localhost:8082"},
 	{ID: 4, Addr: "localhost:8083"},
-	// {ID: 5, Addr: "localhost:8084"},
+}
+
+var standbys = []server.NodeInfo{
+	{ID: 5, Addr: "localhost:8084"},
 	// {ID: 6, Addr: "localhost:8085"},
-	// {ID: 7, Addr: "localhost:8086"},
 }
 
 func main() {
 	serverCmd := flag.NewFlagSet("server", flag.ExitOnError)
 	serverID := serverCmd.Uint("id", 0, "Server node ID (1-7)")
 	serverVerbose := serverCmd.Bool("verbose", false, "Enable debug logging")
+	serverStandby := serverCmd.Bool("standby", false, "Start as standby replica")
 
 	// benchCmd := flag.NewFlagSet("benchmark", flag.ExitOnError)
 	// benchMode := benchCmd.String("mode", "latency", "Benchmark mode: latency or throughput")
@@ -46,14 +50,24 @@ func main() {
 			os.Exit(1)
 		}
 		id := uint32(*serverID)
-		if !validNodeID(id) {
-			fmt.Fprintf(os.Stderr, "Error: invalid node ID %d\n", id)
-			os.Exit(1)
+		if *serverStandby {
+			if !validStandbyID(id) {
+				fmt.Fprintf(os.Stderr, "Error: node ID %d is not a standby\n", id)
+				os.Exit(1)
+			}
+			allNodes := append(slices.Clone(nodes), standbys...)
+			server.RunServer(id, allNodes, *serverVerbose, true)
+		} else {
+			if !validNodeID(id) {
+				fmt.Fprintf(os.Stderr, "Error: invalid node ID %d\n", id)
+				os.Exit(1)
+			}
+			server.RunServer(id, nodes, *serverVerbose, false)
 		}
-		server.RunServer(id, nodes, *serverVerbose)
 
 	case "client":
-		client.RunClient(nodes)
+		allNodes := append(slices.Clone(nodes), standbys...)
+		client.RunClient(allNodes)
 
 	case "latency":
 		ids := make([]uint32, len(nodes))
@@ -76,6 +90,15 @@ func main() {
 
 func validNodeID(id uint32) bool {
 	for _, n := range nodes {
+		if n.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func validStandbyID(id uint32) bool {
+	for _, n := range standbys {
 		if n.ID == id {
 			return true
 		}

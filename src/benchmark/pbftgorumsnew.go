@@ -28,18 +28,19 @@ func srvAddrsToNodes(srvAddrs []string) []pbftserver.NodeInfo {
 // ── benchmark implementation ──────────────────────────────────────────────────
 
 type PbftGorumsNewBenchmark struct {
-	clients []*pbftclient.Client
-	nodes   []pbftserver.NodeInfo // derived from RunOptions.srvAddrs at Init time
-	counter atomic.Uint64
+	clients          []*pbftclient.Client
+	nodes            []pbftserver.NodeInfo // derived from RunOptions.srvAddrs at Init time
+	counter          atomic.Uint64
+	killPrimaryAfter time.Duration
 }
 
 func (b *PbftGorumsNewBenchmark) Init(opts RunOptions) {
 	b.nodes = srvAddrsToNodes(opts.srvAddrs)
+	b.killPrimaryAfter = opts.killPrimaryAfter
 	if len(b.nodes) == 0 {
 		panic("pbftnew: no server addresses provided in RunOptions.srvAddrs")
 	}
 	pbftserver.InitKeys(len(opts.srvAddrs))
-
 	b.clients = make([]*pbftclient.Client, 0, opts.numClients)
 	createClients(b, opts)
 }
@@ -93,7 +94,12 @@ func (b *PbftGorumsNewBenchmark) Stop() {
 	}
 }
 
-func (b *PbftGorumsNewBenchmark) StartBenchmark(_ *pbftclient.Client) []Result {
+func (b *PbftGorumsNewBenchmark) StartBenchmark(c *pbftclient.Client) []Result {
+	if b.killPrimaryAfter > 0 {
+		time.AfterFunc(b.killPrimaryAfter, func() {
+			c.KillNode(1)
+		})
+	}
 	return nil
 }
 
@@ -104,6 +110,6 @@ func (b *PbftGorumsNewBenchmark) StopBenchmark(_ *pbftclient.Client) []Result {
 func (b *PbftGorumsNewBenchmark) Run(c *pbftclient.Client, _ context.Context, _ int) error {
 	req := pbftclient.NewRequest(b.counter.Add(1))
 	reqCtx, _ := context.WithTimeout(context.Background(), 15*time.Second)
-	_, err := pbftclient.Request(c.Cfg, req, reqCtx)
+	_, err := pbftclient.Request(c.ActiveCfg(), req, reqCtx)
 	return err
 }

@@ -24,17 +24,24 @@ service PBFT {
     option (gorums.multicast) = true;
   }
 
-  // // Replica broadcasts view-change to all replicas when primary seems faulty.
-  // rpc ViewChange(ViewChangeMsg) returns (google.protobuf.Empty) {
-  //   option (gorums.multicast) = true;
-  // }
-  // // New primary multicasts new-view to all replicas after collecting 2f view-changes.
-  // rpc NewView(NewViewMsg) returns (google.protobuf.Empty) {
-  //   option (gorums.multicast) = true;
-  // }
+  // Replica broadcasts view-change to all replicas when primary seems faulty.
+  rpc ViewChange(ViewChangeMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+  // New primary multicasts new-view to all replicas after collecting 2f view-changes.
+  rpc NewView(NewViewMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
   // Replica multicasts checkpoint to all replicas periodically.
   rpc Checkpoint(CheckpointMsg) returns (google.protobuf.Empty) {
     option (gorums.multicast) = true;
+  }
+
+  // Standby pulls log state from any live replica before joining the cluster.
+  // Returns the last stable checkpoint plus its 2f+1 proof messages so the
+  // standby can fast-forward its MessageLog and water marks.
+  rpc StateTransfer(StateTransferRequest) returns (StateTransferResponse) {
+    option (gorums.quorumcall) = true;
   }
 
   // Resets server state between benchmark steps.
@@ -44,6 +51,9 @@ service PBFT {
   // Ping is used to probe connectivity between replicas.
   rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty) {
     option (gorums.quorumcall) = true;
+  }
+  rpc Kill(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
   }
 }
 enum Operation {
@@ -130,4 +140,19 @@ message NewViewMsg {
 message PreparedSet {
   PrePrepareMsg pre_prepare = 1;    // valid pre-prepare (without client message)
   repeated PrepareMsg prepares = 2; // 2f matching prepare messages
+}
+
+message StateTransferRequest {
+  uint32 replica_id = 1;
+  bytes signature = 2;  // Ed25519 signature over replica_id
+}
+
+message StateTransferResponse {
+  uint64 last_stable_seq = 1;
+  uint64 low_water_mark = 2;
+  uint64 high_water_mark = 3;
+  uint32 view = 4;
+  repeated CheckpointMsg checkpoint_proof = 5;
+  uint32 replica_id = 6;  // responding replica, needed to verify sig
+  bytes signature = 7;    // Ed25519 signature over last_stable_seq+view+replica_id
 }

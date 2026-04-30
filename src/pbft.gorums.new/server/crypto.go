@@ -73,6 +73,46 @@ func checkpointDigest(seq uint64, replicaID uint32, stateDigest []byte) []byte {
 	return d[:]
 }
 
+func viewChangeDigest(newView uint32, lastStableSeq uint64) []byte {
+	b := make([]byte, 4+8)
+	binary.BigEndian.PutUint32(b[0:], newView)
+	binary.BigEndian.PutUint64(b[4:], lastStableSeq)
+	d := sha256.Sum256(b)
+	return d[:]
+}
+
+func newViewDigest(newView uint32) []byte {
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b[0:], newView)
+	d := sha256.Sum256(b)
+	return d[:]
+}
+
+// stateTransferRequestDigest computes the digest signed in a StateTransferRequest.
+// Covers: replica_id.
+func stateTransferRequestDigest(replicaID uint32) []byte {
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b[0:], replicaID)
+	d := sha256.Sum256(b)
+	return d[:]
+}
+
+// stateTransferResponseDigest computes the digest signed in a StateTransferResponse.
+// Covers: last_stable_seq + view + replica_id.
+func stateTransferResponseDigest(lastStableSeq uint64, view uint32, replicaID uint32) []byte {
+	b := make([]byte, 8+4+4)
+	binary.BigEndian.PutUint64(b[0:], lastStableSeq)
+	binary.BigEndian.PutUint32(b[8:], view)
+	binary.BigEndian.PutUint32(b[12:], replicaID)
+	d := sha256.Sum256(b)
+	return d[:]
+}
+
+func nullDigest() []byte {
+	d := sha256.Sum256([]byte("null"))
+	return d[:]
+}
+
 // ── Sign / Verify ─────────────────────────────────────────────────────────────
 
 func sign(priv ed25519.PrivateKey, digest []byte) []byte {

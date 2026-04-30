@@ -1076,6 +1076,226 @@ func (b0 PreparedSet_builder) Build() *PreparedSet {
 	return m0
 }
 
+type StateTransferRequest struct {
+	state                protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ReplicaId uint32                 `protobuf:"varint,1,opt,name=replica_id,json=replicaId"`
+	xxx_hidden_Signature []byte                 `protobuf:"bytes,2,opt,name=signature"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *StateTransferRequest) Reset() {
+	*x = StateTransferRequest{}
+	mi := &file_pbft_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StateTransferRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StateTransferRequest) ProtoMessage() {}
+
+func (x *StateTransferRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pbft_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *StateTransferRequest) GetReplicaId() uint32 {
+	if x != nil {
+		return x.xxx_hidden_ReplicaId
+	}
+	return 0
+}
+
+func (x *StateTransferRequest) GetSignature() []byte {
+	if x != nil {
+		return x.xxx_hidden_Signature
+	}
+	return nil
+}
+
+func (x *StateTransferRequest) SetReplicaId(v uint32) {
+	x.xxx_hidden_ReplicaId = v
+}
+
+func (x *StateTransferRequest) SetSignature(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Signature = v
+}
+
+type StateTransferRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ReplicaId uint32
+	Signature []byte
+}
+
+func (b0 StateTransferRequest_builder) Build() *StateTransferRequest {
+	m0 := &StateTransferRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_ReplicaId = b.ReplicaId
+	x.xxx_hidden_Signature = b.Signature
+	return m0
+}
+
+type StateTransferResponse struct {
+	state                      protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_LastStableSeq   uint64                 `protobuf:"varint,1,opt,name=last_stable_seq,json=lastStableSeq"`
+	xxx_hidden_LowWaterMark    uint64                 `protobuf:"varint,2,opt,name=low_water_mark,json=lowWaterMark"`
+	xxx_hidden_HighWaterMark   uint64                 `protobuf:"varint,3,opt,name=high_water_mark,json=highWaterMark"`
+	xxx_hidden_View            uint32                 `protobuf:"varint,4,opt,name=view"`
+	xxx_hidden_CheckpointProof *[]*CheckpointMsg      `protobuf:"bytes,5,rep,name=checkpoint_proof,json=checkpointProof"`
+	xxx_hidden_ReplicaId       uint32                 `protobuf:"varint,6,opt,name=replica_id,json=replicaId"`
+	xxx_hidden_Signature       []byte                 `protobuf:"bytes,7,opt,name=signature"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
+}
+
+func (x *StateTransferResponse) Reset() {
+	*x = StateTransferResponse{}
+	mi := &file_pbft_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StateTransferResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StateTransferResponse) ProtoMessage() {}
+
+func (x *StateTransferResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pbft_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *StateTransferResponse) GetLastStableSeq() uint64 {
+	if x != nil {
+		return x.xxx_hidden_LastStableSeq
+	}
+	return 0
+}
+
+func (x *StateTransferResponse) GetLowWaterMark() uint64 {
+	if x != nil {
+		return x.xxx_hidden_LowWaterMark
+	}
+	return 0
+}
+
+func (x *StateTransferResponse) GetHighWaterMark() uint64 {
+	if x != nil {
+		return x.xxx_hidden_HighWaterMark
+	}
+	return 0
+}
+
+func (x *StateTransferResponse) GetView() uint32 {
+	if x != nil {
+		return x.xxx_hidden_View
+	}
+	return 0
+}
+
+func (x *StateTransferResponse) GetCheckpointProof() []*CheckpointMsg {
+	if x != nil {
+		if x.xxx_hidden_CheckpointProof != nil {
+			return *x.xxx_hidden_CheckpointProof
+		}
+	}
+	return nil
+}
+
+func (x *StateTransferResponse) GetReplicaId() uint32 {
+	if x != nil {
+		return x.xxx_hidden_ReplicaId
+	}
+	return 0
+}
+
+func (x *StateTransferResponse) GetSignature() []byte {
+	if x != nil {
+		return x.xxx_hidden_Signature
+	}
+	return nil
+}
+
+func (x *StateTransferResponse) SetLastStableSeq(v uint64) {
+	x.xxx_hidden_LastStableSeq = v
+}
+
+func (x *StateTransferResponse) SetLowWaterMark(v uint64) {
+	x.xxx_hidden_LowWaterMark = v
+}
+
+func (x *StateTransferResponse) SetHighWaterMark(v uint64) {
+	x.xxx_hidden_HighWaterMark = v
+}
+
+func (x *StateTransferResponse) SetView(v uint32) {
+	x.xxx_hidden_View = v
+}
+
+func (x *StateTransferResponse) SetCheckpointProof(v []*CheckpointMsg) {
+	x.xxx_hidden_CheckpointProof = &v
+}
+
+func (x *StateTransferResponse) SetReplicaId(v uint32) {
+	x.xxx_hidden_ReplicaId = v
+}
+
+func (x *StateTransferResponse) SetSignature(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Signature = v
+}
+
+type StateTransferResponse_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	LastStableSeq   uint64
+	LowWaterMark    uint64
+	HighWaterMark   uint64
+	View            uint32
+	CheckpointProof []*CheckpointMsg
+	ReplicaId       uint32
+	Signature       []byte
+}
+
+func (b0 StateTransferResponse_builder) Build() *StateTransferResponse {
+	m0 := &StateTransferResponse{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_LastStableSeq = b.LastStableSeq
+	x.xxx_hidden_LowWaterMark = b.LowWaterMark
+	x.xxx_hidden_HighWaterMark = b.HighWaterMark
+	x.xxx_hidden_View = b.View
+	x.xxx_hidden_CheckpointProof = &b.CheckpointProof
+	x.xxx_hidden_ReplicaId = b.ReplicaId
+	x.xxx_hidden_Signature = b.Signature
+	return m0
+}
+
 var File_pbft_proto protoreflect.FileDescriptor
 
 const file_pbft_proto_rawDesc = "" +
@@ -1139,10 +1359,23 @@ const file_pbft_proto_rawDesc = "" +
 	"\vPreparedSet\x124\n" +
 	"\vpre_prepare\x18\x01 \x01(\v2\x13.pbft.PrePrepareMsgR\n" +
 	"prePrepare\x12,\n" +
-	"\bprepares\x18\x02 \x03(\v2\x10.pbft.PrepareMsgR\bprepares* \n" +
+	"\bprepares\x18\x02 \x03(\v2\x10.pbft.PrepareMsgR\bprepares\"S\n" +
+	"\x14StateTransferRequest\x12\x1d\n" +
+	"\n" +
+	"replica_id\x18\x01 \x01(\rR\treplicaId\x12\x1c\n" +
+	"\tsignature\x18\x02 \x01(\fR\tsignature\"\x9e\x02\n" +
+	"\x15StateTransferResponse\x12&\n" +
+	"\x0flast_stable_seq\x18\x01 \x01(\x04R\rlastStableSeq\x12$\n" +
+	"\x0elow_water_mark\x18\x02 \x01(\x04R\flowWaterMark\x12&\n" +
+	"\x0fhigh_water_mark\x18\x03 \x01(\x04R\rhighWaterMark\x12\x12\n" +
+	"\x04view\x18\x04 \x01(\rR\x04view\x12>\n" +
+	"\x10checkpoint_proof\x18\x05 \x03(\v2\x13.pbft.CheckpointMsgR\x0fcheckpointProof\x12\x1d\n" +
+	"\n" +
+	"replica_id\x18\x06 \x01(\rR\treplicaId\x12\x1c\n" +
+	"\tsignature\x18\a \x01(\fR\tsignature* \n" +
 	"\tOperation\x12\b\n" +
 	"\x04READ\x10\x00\x12\t\n" +
-	"\x05WRITE\x10\x012\xb0\x03\n" +
+	"\x05WRITE\x10\x012\xba\x05\n" +
 	"\x04PBFT\x121\n" +
 	"\rClientRequest\x12\r.pbft.Request\x1a\v.pbft.Reply\"\x04\xa0\xb5\x18\x01\x12?\n" +
 	"\n" +
@@ -1150,25 +1383,32 @@ const file_pbft_proto_rawDesc = "" +
 	"\aPrepare\x12\x10.pbft.PrepareMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x127\n" +
 	"\x06Commit\x12\x0f.pbft.CommitMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12?\n" +
 	"\n" +
-	"Checkpoint\x12\x13.pbft.CheckpointMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12A\n" +
+	"ViewChange\x12\x13.pbft.ViewChangeMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x129\n" +
+	"\aNewView\x12\x10.pbft.NewViewMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12?\n" +
+	"\n" +
+	"Checkpoint\x12\x13.pbft.CheckpointMsg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12N\n" +
+	"\rStateTransfer\x12\x1a.pbft.StateTransferRequest\x1a\x1b.pbft.StateTransferResponse\"\x04\xa0\xb5\x18\x01\x12A\n" +
 	"\tBenchmark\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12<\n" +
-	"\x04Ping\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\"\x04\xa0\xb5\x18\x01B\x11Z\n" +
+	"\x04Ping\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\"\x04\xa0\xb5\x18\x01\x12<\n" +
+	"\x04Kill\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01B\x11Z\n" +
 	"proto/pbft\x92\x03\x02\b\x02b\beditionsp\xe9\a"
 
 var file_pbft_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pbft_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_pbft_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_pbft_proto_goTypes = []any{
-	(Operation)(0),        // 0: pbft.Operation
-	(*Request)(nil),       // 1: pbft.Request
-	(*Reply)(nil),         // 2: pbft.Reply
-	(*PrePrepareMsg)(nil), // 3: pbft.PrePrepareMsg
-	(*PrepareMsg)(nil),    // 4: pbft.PrepareMsg
-	(*CommitMsg)(nil),     // 5: pbft.CommitMsg
-	(*CheckpointMsg)(nil), // 6: pbft.CheckpointMsg
-	(*ViewChangeMsg)(nil), // 7: pbft.ViewChangeMsg
-	(*NewViewMsg)(nil),    // 8: pbft.NewViewMsg
-	(*PreparedSet)(nil),   // 9: pbft.PreparedSet
-	(*emptypb.Empty)(nil), // 10: google.protobuf.Empty
+	(Operation)(0),                // 0: pbft.Operation
+	(*Request)(nil),               // 1: pbft.Request
+	(*Reply)(nil),                 // 2: pbft.Reply
+	(*PrePrepareMsg)(nil),         // 3: pbft.PrePrepareMsg
+	(*PrepareMsg)(nil),            // 4: pbft.PrepareMsg
+	(*CommitMsg)(nil),             // 5: pbft.CommitMsg
+	(*CheckpointMsg)(nil),         // 6: pbft.CheckpointMsg
+	(*ViewChangeMsg)(nil),         // 7: pbft.ViewChangeMsg
+	(*NewViewMsg)(nil),            // 8: pbft.NewViewMsg
+	(*PreparedSet)(nil),           // 9: pbft.PreparedSet
+	(*StateTransferRequest)(nil),  // 10: pbft.StateTransferRequest
+	(*StateTransferResponse)(nil), // 11: pbft.StateTransferResponse
+	(*emptypb.Empty)(nil),         // 12: google.protobuf.Empty
 }
 var file_pbft_proto_depIdxs = []int32{
 	0,  // 0: pbft.Request.operation:type_name -> pbft.Operation
@@ -1177,25 +1417,34 @@ var file_pbft_proto_depIdxs = []int32{
 	3,  // 3: pbft.NewViewMsg.pre_prepares:type_name -> pbft.PrePrepareMsg
 	3,  // 4: pbft.PreparedSet.pre_prepare:type_name -> pbft.PrePrepareMsg
 	4,  // 5: pbft.PreparedSet.prepares:type_name -> pbft.PrepareMsg
-	1,  // 6: pbft.PBFT.ClientRequest:input_type -> pbft.Request
-	3,  // 7: pbft.PBFT.PrePrepare:input_type -> pbft.PrePrepareMsg
-	4,  // 8: pbft.PBFT.Prepare:input_type -> pbft.PrepareMsg
-	5,  // 9: pbft.PBFT.Commit:input_type -> pbft.CommitMsg
-	6,  // 10: pbft.PBFT.Checkpoint:input_type -> pbft.CheckpointMsg
-	10, // 11: pbft.PBFT.Benchmark:input_type -> google.protobuf.Empty
-	10, // 12: pbft.PBFT.Ping:input_type -> google.protobuf.Empty
-	2,  // 13: pbft.PBFT.ClientRequest:output_type -> pbft.Reply
-	10, // 14: pbft.PBFT.PrePrepare:output_type -> google.protobuf.Empty
-	10, // 15: pbft.PBFT.Prepare:output_type -> google.protobuf.Empty
-	10, // 16: pbft.PBFT.Commit:output_type -> google.protobuf.Empty
-	10, // 17: pbft.PBFT.Checkpoint:output_type -> google.protobuf.Empty
-	10, // 18: pbft.PBFT.Benchmark:output_type -> google.protobuf.Empty
-	10, // 19: pbft.PBFT.Ping:output_type -> google.protobuf.Empty
-	13, // [13:20] is the sub-list for method output_type
-	6,  // [6:13] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	6,  // 6: pbft.StateTransferResponse.checkpoint_proof:type_name -> pbft.CheckpointMsg
+	1,  // 7: pbft.PBFT.ClientRequest:input_type -> pbft.Request
+	3,  // 8: pbft.PBFT.PrePrepare:input_type -> pbft.PrePrepareMsg
+	4,  // 9: pbft.PBFT.Prepare:input_type -> pbft.PrepareMsg
+	5,  // 10: pbft.PBFT.Commit:input_type -> pbft.CommitMsg
+	7,  // 11: pbft.PBFT.ViewChange:input_type -> pbft.ViewChangeMsg
+	8,  // 12: pbft.PBFT.NewView:input_type -> pbft.NewViewMsg
+	6,  // 13: pbft.PBFT.Checkpoint:input_type -> pbft.CheckpointMsg
+	10, // 14: pbft.PBFT.StateTransfer:input_type -> pbft.StateTransferRequest
+	12, // 15: pbft.PBFT.Benchmark:input_type -> google.protobuf.Empty
+	12, // 16: pbft.PBFT.Ping:input_type -> google.protobuf.Empty
+	12, // 17: pbft.PBFT.Kill:input_type -> google.protobuf.Empty
+	2,  // 18: pbft.PBFT.ClientRequest:output_type -> pbft.Reply
+	12, // 19: pbft.PBFT.PrePrepare:output_type -> google.protobuf.Empty
+	12, // 20: pbft.PBFT.Prepare:output_type -> google.protobuf.Empty
+	12, // 21: pbft.PBFT.Commit:output_type -> google.protobuf.Empty
+	12, // 22: pbft.PBFT.ViewChange:output_type -> google.protobuf.Empty
+	12, // 23: pbft.PBFT.NewView:output_type -> google.protobuf.Empty
+	12, // 24: pbft.PBFT.Checkpoint:output_type -> google.protobuf.Empty
+	11, // 25: pbft.PBFT.StateTransfer:output_type -> pbft.StateTransferResponse
+	12, // 26: pbft.PBFT.Benchmark:output_type -> google.protobuf.Empty
+	12, // 27: pbft.PBFT.Ping:output_type -> google.protobuf.Empty
+	12, // 28: pbft.PBFT.Kill:output_type -> google.protobuf.Empty
+	18, // [18:29] is the sub-list for method output_type
+	7,  // [7:18] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_pbft_proto_init() }
@@ -1209,7 +1458,7 @@ func file_pbft_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pbft_proto_rawDesc), len(file_pbft_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

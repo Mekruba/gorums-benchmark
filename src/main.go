@@ -10,6 +10,7 @@ import (
 	"runtime/pprof"
 	"strconv"
 	"syscall"
+	"time"
 
 	bench "github.com/Mekruba/gorums-benchmark/benchmark"
 	pbftGorumsNew "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
@@ -42,6 +43,7 @@ func printUsage() {
 	fmt.Println("  DUR         seconds per step")
 	fmt.Println("  RUNS        number of benchmark runs")
 	fmt.Println("  TYPE        run type (0=Throughput, 1=Performance)")
+	fmt.Println("  KILLPRIMARY  kill primary after N seconds (0 = disabled)")
 }
 
 func main() {
@@ -58,6 +60,7 @@ func main() {
 	steps := flag.Int("steps", 0, "Number of throughput steps")
 	dur := flag.Int("dur", 0, "Seconds per throughput step")
 	help := flag.Bool("help", false, "Show help")
+	killPrimary := flag.Int("killprimary", 0, "Kill primary after N seconds (0 = disabled)")
 
 	flag.Usage = printUsage
 	flag.Parse()
@@ -167,17 +170,26 @@ func main() {
 		os.Exit(1)
 	}
 
+	if v := os.Getenv("KILLPRIMARY"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid KILLPRIMARY=%q: %v\n", v, err)
+			os.Exit(1)
+		}
+		*killPrimary = n
+	}
+
 	if *runSrv {
 		if srvID > len(servers) {
 			return
 		}
 		runServer(benchType, srvID, servers, *withLogger, *memProfile, *local)
 	} else {
-		runBenchmark(benchType, clients, *throughput, *numClients, *clientBasePort, *steps, *runs, *dur, *local, servers, *memProfile, *withLogger, runType)
+		runBenchmark(benchType, clients, *throughput, *numClients, *clientBasePort, *steps, *runs, *dur, *killPrimary, *local, servers, *memProfile, *withLogger, runType)
 	}
 }
 
-func runBenchmark(name string, clients ServerEntry, throughput, numClients, clientBasePort, steps, runs, dur int, local bool, srvAddrs map[int]Server, memProfile, withLogger bool, runType bench.RunType) {
+func runBenchmark(name string, clients ServerEntry, throughput, numClients, clientBasePort, steps, runs, dur, killPrimary int, local bool, srvAddrs map[int]Server, memProfile, withLogger bool, runType bench.RunType) {
 	options := []bench.RunOption{bench.WithRunType(runType)}
 	if withLogger {
 		file, err := os.Create("./logs/log.Clients.json")
@@ -227,6 +239,9 @@ func runBenchmark(name string, clients ServerEntry, throughput, numClients, clie
 	if memProfile {
 		options = append(options, bench.WithMemProfile())
 	}
+	if killPrimary > 0 {
+		options = append(options, bench.KillPrimaryAfter(time.Duration(killPrimary)*time.Second))
+	}
 	if clients != nil {
 		clientsMap := make(map[int]string, len(clients))
 		for id, entry := range clients {
@@ -244,6 +259,7 @@ type BenchmarkServer interface {
 
 func runServer(benchType string, id int, srvAddrs map[int]Server, withLogger, memprofile, local bool) {
 	fmt.Println("Running server:", benchType)
+
 	srvAddresses := make(map[int]string, len(srvAddrs))
 
 	fmt.Println("--------")
@@ -265,7 +281,9 @@ func runServer(benchType string, id int, srvAddrs map[int]Server, withLogger, me
 	var srv BenchmarkServer
 	switch benchType {
 	case bench.PBFTGorumsNew:
-		srv = pbftGorumsNew.New(uint32(id), srvAddresses)
+		pbftGorumsNew.InitLogger(uint32(id), withLogger)
+
+		srv = pbftGorumsNew.New(uint32(id), srvAddresses, false)
 	default:
 		fmt.Fprintf(os.Stderr, "Error: no server implementation for benchmark type %q\n", benchType)
 		os.Exit(1)

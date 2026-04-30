@@ -5,6 +5,8 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+
+	pb "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/proto"
 )
 
 // logEntry tracks the state of a single request in the PBFT protocol.
@@ -48,7 +50,7 @@ type commitRecord struct {
 
 func (e *logEntry) checkPrepared(f int) bool {
 	if e.prePrepare == nil {
-		slog.Warn("checkPrepared: prePrepare is nil", "seq", e.seq)
+		slog.Debug("checkPrepared: prePrepare is nil", "seq", e.seq)
 		return false
 	}
 	if e.prepared {
@@ -79,7 +81,7 @@ func (e *logEntry) checkPrepared(f int) bool {
 
 func (e *logEntry) checkCommitted(f int) bool {
 	if e.prePrepare == nil {
-		slog.Warn("checkCommitted: prePrepare is nil", "seq", e.seq)
+		slog.Debug("checkCommitted: prePrepare is nil", "seq", e.seq)
 		return false
 	}
 	if !e.prepared || e.commited {
@@ -121,11 +123,12 @@ func (e *logEntry) isPrepared() bool {
 type checkpointState struct {
 	seq     uint64
 	digests map[string]int
-	voters  map[uint32]bool // track who has voted to prevent double counting
+	voters  map[uint32]bool     // track who has voted to prevent double counting
+	proof   []*pb.CheckpointMsg // the 2f+1 messages that certified this checkpoint
 	stable  bool
 }
 
-func (c *checkpointState) recordVote(replicaID uint32, digest []byte, f int) bool {
+func (c *checkpointState) recordVote(replicaID uint32, digest []byte, msg *pb.CheckpointMsg, f int) bool {
 	if c.stable {
 		return false
 	}
@@ -133,6 +136,7 @@ func (c *checkpointState) recordVote(replicaID uint32, digest []byte, f int) boo
 		return false // already voted
 	}
 	c.voters[replicaID] = true
+	c.proof = append(c.proof, msg)
 	key := string(digest)
 	c.digests[key]++
 	return c.digests[key] >= 2*f+1
@@ -141,8 +145,8 @@ func (c *checkpointState) recordVote(replicaID uint32, digest []byte, f int) boo
 // ── MessageLog ────────────────────────────────────────────────────────────────
 
 const (
-	checkpointInterval = 1000
-	waterMarkWindow    = 2000
+	checkpointInterval = 10000
+	waterMarkWindow    = 12000
 )
 
 // MessageLog tracks all in-flight log entries plus checkpoint state
@@ -233,6 +237,22 @@ func (ml *MessageLog) LastStableSeq() uint64 {
 	return ml.lastStableSeq
 }
 
+// StableCheckpointProof returns the 2f+1 CheckpointMsg set that certified the
+// last stable checkpoint. Returns nil if no stable checkpoint exists yet.
+// Used by the StateTransfer handler to respond to joining standbys.
+func (ml *MessageLog) StableCheckpointProof() (seq uint64, proof []*pb.CheckpointMsg) {
+	ml.mu.RLock()
+	defer ml.mu.RUnlock()
+	cp, ok := ml.checkpoints[ml.lastStableSeq]
+	if !ok || !cp.stable {
+		return 0, nil
+	}
+	// Return a copy so the caller can't mutate the stored slice.
+	out := make([]*pb.CheckpointMsg, len(cp.proof))
+	copy(out, cp.proof)
+	return cp.seq, out
+}
+
 // PreparedEntries returns all log entries that have reached prepared state
 // with sequence number above aboveSeq. Used when building the P set for
 // a VIEW-CHANGE message.
@@ -249,9 +269,11 @@ func (ml *MessageLog) PreparedEntries(aboveSeq uint64) []*logEntry {
 }
 
 // RecordCheckpoint records a CHECKPOINT vote for the given seq and digest.
+// msg is the full CheckpointMsg and is retained so it can be included in the
+// stable proof served to standbys via StateTransfer.
 // Returns (stable, gcCount) where stable is true if this vote made the
 // checkpoint stable, and gcCount is the number of log entries discarded.
-func (ml *MessageLog) RecordCheckpoint(seq uint64, replicaID uint32, digest []byte, f int) (stable bool, gcCount int) {
+func (ml *MessageLog) RecordCheckpoint(seq uint64, replicaID uint32, digest []byte, msg *pb.CheckpointMsg, f int) (stable bool, gcCount int) {
 	ml.mu.Lock()
 	defer ml.mu.Unlock()
 
@@ -265,7 +287,7 @@ func (ml *MessageLog) RecordCheckpoint(seq uint64, replicaID uint32, digest []by
 		ml.checkpoints[seq] = cp
 	}
 
-	if !cp.recordVote(replicaID, digest, f) {
+	if !cp.recordVote(replicaID, digest, msg, f) {
 		return false, 0
 	}
 

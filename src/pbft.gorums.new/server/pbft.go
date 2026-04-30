@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"log/slog"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,6 +26,7 @@ type PBFTServer struct {
 	view        uint32
 	primary     bool
 	clusterSize int
+	sequence    atomic.Uint64
 
 	mu sync.Mutex // protects view and primary
 
@@ -45,6 +47,13 @@ type PBFTServer struct {
 
 	keys     NodeKeys
 	peerKeys map[uint32]ed25519.PublicKey // nodeID → public key
+
+	viewChangeMu    sync.Mutex
+	viewChangeTimer *time.Timer
+	viewChangeMsgs  map[uint32]*pb.ViewChangeMsg // replica_id → msg
+	inViewChange    bool
+
+	primaryRunning atomic.Bool
 }
 
 func NewPBFTServer(id uint32, clusterSize int) *PBFTServer {
@@ -140,16 +149,28 @@ func (p *PBFTServer) executeEntry(e *logEntry) {
 	if p.msgLog.ShouldCheckpoint(e.seq) {
 		p.sendCheckpoint(e.seq)
 	}
+	p.pendingMu.Lock()
+	hasPending := len(p.pending) > 0
+	p.pendingMu.Unlock()
+
+	if hasPending {
+		p.resetViewChangeTimer()
+	} else {
+		p.stopViewChangeTimer()
+	}
 }
 
 // ── PBFT primary loop and RPC handlers  ───────
 
 func (p *PBFTServer) runPrimary() {
-	var sequence uint64
+	if !p.primaryRunning.CompareAndSwap(false, true) {
+		return
+	}
+	defer p.primaryRunning.Store(false)
 
 	for req := range p.reqQueue {
-		sequence++
-		seq := sequence
+
+		seq := p.sequence.Add(1)
 
 		if seq > p.msgLog.HighWaterMark() {
 			slog.Debug("primary stalled at high water mark",
@@ -189,6 +210,8 @@ func (p *PBFTServer) ClientRequest(ctx gorums.ServerCtx, request *pb.Request) (*
 	slog.Debug("CLIENT-REQUEST", "node", p.id, "ts", ts)
 
 	p.received.Add(1)
+
+	p.startViewChangeTimer()
 
 	// Check if the protocol already completed before we got here.
 	p.pendingMu.Lock()
@@ -253,9 +276,16 @@ func (p *PBFTServer) Ping(ctx gorums.ServerCtx, _ *emptypb.Empty) (*emptypb.Empt
 	return &emptypb.Empty{}, nil
 }
 
+func (p *PBFTServer) Kill(ctx gorums.ServerCtx, _ *emptypb.Empty) {
+	slog.Info("kill signal received, shutting down", "node", p.id)
+	os.Exit(0)
+}
+
 func (p *PBFTServer) Benchmark(ctx gorums.ServerCtx, _ *emptypb.Empty) {
 	ctx.Release()
 	slog.Info("resetting state", "node", p.id)
+
+	p.stopViewChangeTimer()
 
 	// Wait for all in-flight requests to finish
 	deadline := time.After(5 * time.Second)
@@ -301,6 +331,10 @@ reset:
 
 // Backup Replicas receive PrePrepare from Primary
 func (p *PBFTServer) PrePrepare(ctx gorums.ServerCtx, request *pb.PrePrepareMsg) {
+	if p.isInViewChange() {
+		return
+	}
+
 	seq := request.GetSequence()
 	primaryID := uint32(p.view%uint32(p.clusterSize)) + 1
 	if !verifyMsg(primaryID, prePrepareDigest(request.GetView(), seq, request.GetDigest()), request.GetSignature()) {
@@ -312,7 +346,7 @@ func (p *PBFTServer) PrePrepare(ctx gorums.ServerCtx, request *pb.PrePrepareMsg)
 		return
 	}
 
-	slog.Debug("PRE-PREPARE", "node", p.id, "seq", seq)
+	slog.Debug("PRE-PREPARE", "node", p.id, "seq", seq, "view", p.view)
 
 	if p.tryRecordPrePrepare(seq, request.GetTimestamp()) {
 		cfgCtx := ctx.ConfigContext()
@@ -322,7 +356,7 @@ func (p *PBFTServer) PrePrepare(ctx gorums.ServerCtx, request *pb.PrePrepareMsg)
 		sig := sign(getPrivKey(p.id), prepareDigest(request.GetView(), seq, p.id, request.GetDigest()))
 
 		ctx.Release()
-		slog.Debug("prepare sent", "node", p.id, "seq", seq)
+		slog.Debug("prepare sent", "node", p.id, "seq", seq, "view", p.view)
 		pb.Prepare(cfgCtx, pb.PrepareMsg_builder{
 			View: request.GetView(), Sequence: seq, ReplicaId: p.id,
 			Digest:    request.GetDigest(),
@@ -346,6 +380,10 @@ func (p *PBFTServer) PrePrepare(ctx gorums.ServerCtx, request *pb.PrePrepareMsg)
 }
 
 func (p *PBFTServer) Prepare(ctx gorums.ServerCtx, request *pb.PrepareMsg) {
+	if p.isInViewChange() {
+		return
+	}
+
 	seq := request.GetSequence()
 	if !verifyMsg(request.GetReplicaId(), prepareDigest(request.GetView(), seq, request.GetReplicaId(), request.GetDigest()), request.GetSignature()) {
 		slog.Warn("Prepare signature invalid", "node", p.id, "seq", seq, "from", request.GetReplicaId())
@@ -355,7 +393,7 @@ func (p *PBFTServer) Prepare(ctx gorums.ServerCtx, request *pb.PrepareMsg) {
 		slog.Warn("Prepare outside water marks", "node", p.id, "seq", seq)
 		return
 	}
-	slog.Debug("prepare received", "node", p.id, "seq", seq, "from", request.GetReplicaId())
+	slog.Debug("prepare received", "node", p.id, "seq", seq, "from", request.GetReplicaId(), "view", request.GetView())
 
 	if p.tryPrepare(seq, request.GetView(), request.GetReplicaId(), request.GetDigest()) {
 		cfgCtx := ctx.ConfigContext()
@@ -365,7 +403,7 @@ func (p *PBFTServer) Prepare(ctx gorums.ServerCtx, request *pb.PrepareMsg) {
 		sig := sign(getPrivKey(p.id), commitDigest(request.GetView(), seq, p.id, request.GetDigest()))
 		ctx.Release()
 
-		slog.Debug("commit sent", "node", p.id, "seq", seq)
+		slog.Debug("commit sent", "node", p.id, "seq", seq, "view", p.view)
 		pb.Commit(cfgCtx, pb.CommitMsg_builder{
 			View:      request.GetView(),
 			Sequence:  seq,
@@ -377,6 +415,10 @@ func (p *PBFTServer) Prepare(ctx gorums.ServerCtx, request *pb.PrepareMsg) {
 }
 
 func (p *PBFTServer) Commit(ctx gorums.ServerCtx, request *pb.CommitMsg) {
+	if p.isInViewChange() {
+		return
+	}
+
 	seq := request.GetSequence()
 	if !verifyMsg(request.GetReplicaId(), commitDigest(request.GetView(), seq, request.GetReplicaId(), request.GetDigest()), request.GetSignature()) {
 		slog.Warn("Commit signature invalid", "node", p.id, "seq", seq, "from", request.GetReplicaId())
@@ -386,7 +428,7 @@ func (p *PBFTServer) Commit(ctx gorums.ServerCtx, request *pb.CommitMsg) {
 		slog.Warn("Commit outside water marks", "node", p.id, "seq", seq)
 		return
 	}
-	slog.Debug("commit received", "node", p.id, "seq", seq, "from", request.GetReplicaId())
+	slog.Debug("commit received", "node", p.id, "seq", seq, "from", request.GetReplicaId(), "view", request.GetView())
 
 	if p.tryCommit(seq, request.GetView(), request.GetReplicaId(), request.GetDigest()) {
 		p.deliver(p.msgLog.GetOrCreate(seq))
@@ -394,6 +436,12 @@ func (p *PBFTServer) Commit(ctx gorums.ServerCtx, request *pb.CommitMsg) {
 }
 
 // ── PBFT Server Helpers ───────────────────────────────────────────────────────
+
+func (p *PBFTServer) isInViewChange() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.inViewChange
+}
 
 // tryRecordPrePrepare returns true if this is the first time we see a PrePrepare for this seq.
 func (p *PBFTServer) tryRecordPrePrepare(seq uint64, ts int64) bool {

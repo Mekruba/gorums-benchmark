@@ -54,11 +54,17 @@ type AsyncEmpty = *gorums.Async[*emptypb.Empty]
 // AsyncReply is a future for async quorum calls returning *Reply.
 type AsyncReply = *gorums.Async[*Reply]
 
+// AsyncStateTransferResponse is a future for async quorum calls returning *StateTransferResponse.
+type AsyncStateTransferResponse = *gorums.Async[*StateTransferResponse]
+
 // CorrectableEmpty is a correctable object for quorum calls returning *emptypb.Empty.
 type CorrectableEmpty = *gorums.Correctable[*emptypb.Empty]
 
 // CorrectableReply is a correctable object for quorum calls returning *Reply.
 type CorrectableReply = *gorums.Correctable[*Reply]
+
+// CorrectableStateTransferResponse is a correctable object for quorum calls returning *StateTransferResponse.
+type CorrectableStateTransferResponse = *gorums.Correctable[*StateTransferResponse]
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ emptypb.Empty
@@ -88,21 +94,29 @@ func Commit(ctx *ConfigContext, in *CommitMsg, opts ...gorums.CallOption) error 
 	return gorums.Multicast(ctx, in, "pbft.PBFT.Commit", opts...)
 }
 
-// // Replica broadcasts view-change to all replicas when primary seems faulty.
-//
-//	rpc ViewChange(ViewChangeMsg) returns (google.protobuf.Empty) {
-//	  option (gorums.multicast) = true;
-//	}
-//
-// // New primary multicasts new-view to all replicas after collecting 2f view-changes.
-//
-//	rpc NewView(NewViewMsg) returns (google.protobuf.Empty) {
-//	  option (gorums.multicast) = true;
-//	}
-//
+// Replica broadcasts view-change to all replicas when primary seems faulty.
+func ViewChange(ctx *ConfigContext, in *ViewChangeMsg, opts ...gorums.CallOption) error {
+	return gorums.Multicast(ctx, in, "pbft.PBFT.ViewChange", opts...)
+}
+
+// New primary multicasts new-view to all replicas after collecting 2f view-changes.
+func NewView(ctx *ConfigContext, in *NewViewMsg, opts ...gorums.CallOption) error {
+	return gorums.Multicast(ctx, in, "pbft.PBFT.NewView", opts...)
+}
+
 // Replica multicasts checkpoint to all replicas periodically.
 func Checkpoint(ctx *ConfigContext, in *CheckpointMsg, opts ...gorums.CallOption) error {
 	return gorums.Multicast(ctx, in, "pbft.PBFT.Checkpoint", opts...)
+}
+
+// Standby pulls log state from any live replica before joining the cluster.
+// Returns the last stable checkpoint plus its 2f+1 proof messages so the
+// standby can fast-forward its MessageLog and water marks.
+func StateTransfer(ctx *ConfigContext, in *StateTransferRequest, opts ...gorums.CallOption) *gorums.Responses[*StateTransferResponse] {
+	return gorums.QuorumCall[*StateTransferRequest, *StateTransferResponse](
+		ctx, in, "pbft.PBFT.StateTransfer",
+		opts...,
+	)
 }
 
 // Resets server state between benchmark steps.
@@ -118,15 +132,25 @@ func Ping(ctx *ConfigContext, in *emptypb.Empty, opts ...gorums.CallOption) *gor
 	)
 }
 
+// Kill is a unicast call invoked on the node in ctx.
+// No reply is returned to the client.
+func Kill(ctx *NodeContext, in *emptypb.Empty, opts ...gorums.CallOption) error {
+	return gorums.Unicast(ctx, in, "pbft.PBFT.Kill", opts...)
+}
+
 // PBFT is the server-side API for the PBFT Service
 type PBFTServer interface {
 	ClientRequest(gorums.ServerCtx, *Request) (*Reply, error)
 	PrePrepare(gorums.ServerCtx, *PrePrepareMsg)
 	Prepare(gorums.ServerCtx, *PrepareMsg)
 	Commit(gorums.ServerCtx, *CommitMsg)
+	ViewChange(gorums.ServerCtx, *ViewChangeMsg)
+	NewView(gorums.ServerCtx, *NewViewMsg)
 	Checkpoint(gorums.ServerCtx, *CheckpointMsg)
+	StateTransfer(gorums.ServerCtx, *StateTransferRequest) (*StateTransferResponse, error)
 	Benchmark(gorums.ServerCtx, *emptypb.Empty)
 	Ping(gorums.ServerCtx, *emptypb.Empty) (*emptypb.Empty, error)
+	Kill(gorums.ServerCtx, *emptypb.Empty)
 }
 
 func RegisterPBFTServer(srv *gorums.Server, impl PBFTServer) {
@@ -153,10 +177,28 @@ func RegisterPBFTServer(srv *gorums.Server, impl PBFTServer) {
 		impl.Commit(ctx, req)
 		return nil, nil
 	})
+	srv.RegisterHandler("pbft.PBFT.ViewChange", func(ctx gorums.ServerCtx, in *gorums.Message) (*gorums.Message, error) {
+		req := gorums.AsProto[*ViewChangeMsg](in)
+		impl.ViewChange(ctx, req)
+		return nil, nil
+	})
+	srv.RegisterHandler("pbft.PBFT.NewView", func(ctx gorums.ServerCtx, in *gorums.Message) (*gorums.Message, error) {
+		req := gorums.AsProto[*NewViewMsg](in)
+		impl.NewView(ctx, req)
+		return nil, nil
+	})
 	srv.RegisterHandler("pbft.PBFT.Checkpoint", func(ctx gorums.ServerCtx, in *gorums.Message) (*gorums.Message, error) {
 		req := gorums.AsProto[*CheckpointMsg](in)
 		impl.Checkpoint(ctx, req)
 		return nil, nil
+	})
+	srv.RegisterHandler("pbft.PBFT.StateTransfer", func(ctx gorums.ServerCtx, in *gorums.Message) (*gorums.Message, error) {
+		req := gorums.AsProto[*StateTransferRequest](in)
+		resp, err := impl.StateTransfer(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return gorums.NewResponseMessage(in, resp), nil
 	})
 	srv.RegisterHandler("pbft.PBFT.Benchmark", func(ctx gorums.ServerCtx, in *gorums.Message) (*gorums.Message, error) {
 		req := gorums.AsProto[*emptypb.Empty](in)
@@ -170,5 +212,10 @@ func RegisterPBFTServer(srv *gorums.Server, impl PBFTServer) {
 			return nil, err
 		}
 		return gorums.NewResponseMessage(in, resp), nil
+	})
+	srv.RegisterHandler("pbft.PBFT.Kill", func(ctx gorums.ServerCtx, in *gorums.Message) (*gorums.Message, error) {
+		req := gorums.AsProto[*emptypb.Empty](in)
+		impl.Kill(ctx, req)
+		return nil, nil
 	})
 }
