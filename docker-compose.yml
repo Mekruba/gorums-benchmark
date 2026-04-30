@@ -131,6 +131,7 @@ services:
       - RUNS=${RUNS}
       - DUR=${DUR}
       - LOG=${LOG}
+      - KILLPRIMARY=${KILLPRIMARY}
     volumes:
       - ./logs:/app/logs
       - ./csv:/app/src/csv:Z
