@@ -13,7 +13,9 @@ import (
 	"time"
 
 	bench "github.com/Mekruba/gorums-benchmark/benchmark"
+	bftsmartGorums "github.com/Mekruba/gorums-benchmark/bft-smart.gorums/server"
 	pbftGorumsNew "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
+
 	"github.com/joho/godotenv"
 )
 
@@ -284,6 +286,8 @@ func runServer(benchType string, id int, srvAddrs map[int]Server, withLogger, me
 		pbftGorumsNew.InitLogger(uint32(id), withLogger)
 
 		srv = pbftGorumsNew.New(uint32(id), srvAddresses, false)
+	case bench.BFTSmartGorums:
+		srv = bftsmartGorums.New(uint32(id), srvAddresses, false)
 	default:
 		fmt.Fprintf(os.Stderr, "Error: no server implementation for benchmark type %q\n", benchType)
 		os.Exit(1)
