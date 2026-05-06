@@ -69,8 +69,15 @@ func (s *BFTSmartServer) SendStateTransfer() error {
 	s.view = resp.GetView()
 	s.mu.Unlock()
 
+	// advance consensusID so runDeliver starts at the right CID
+	lastDecided := resp.GetLastConsensusId()
+	if lastDecided > 0 {
+		s.consensusID.Store(lastDecided)
+		s.msgLog.SetLowWaterMark(lastDecided)
+	}
+
 	slog.Info("state transfer done", "node", s.id,
-		"last_cid", resp.GetLastConsensusId(), "view", resp.GetView())
+		"last_cid", lastDecided, "view", resp.GetView())
 	return nil
 }
 
@@ -83,13 +90,14 @@ func (s *BFTSmartServer) StateTransfer(_ gorums.ServerCtx, req *pb.StateTransfer
 	}
 
 	cid, proof := s.msgLog.StableCheckpointProof()
+	lastDecided := s.consensusID.Load()
 	s.mu.Lock()
 	view := s.view
 	s.mu.Unlock()
 
-	sig := sign(getPrivKey(s.id), stateTransferRespDigest(cid, view, s.id))
+	sig := sign(getPrivKey(s.id), stateTransferRespDigest(lastDecided, view, s.id))
 	return pb.StateTransferResponse_builder{
-		LastConsensusId: cid, CheckpointId: cid,
+		LastConsensusId: lastDecided, CheckpointId: cid,
 		View: view, CheckpointProof: proof,
 		ReplicaId: s.id, PartIndex: 0, TotalParts: 1,
 		Signature: sig,

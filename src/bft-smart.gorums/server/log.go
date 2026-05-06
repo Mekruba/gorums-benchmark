@@ -20,7 +20,9 @@ type ConsensusEntry struct {
 	Writes  map[uint32]*VoteRecord // replica → WRITE
 	Accepts map[uint32]*VoteRecord // replica → ACCEPT
 
-	// Timestamps of requests in this batch, used for routing replies.
+	// Full batch of requests, needed to inspect operation types on delivery.
+	Batch []*pb.Request
+	// Timestamps extracted from Batch for reply routing.
 	BatchTimestamps []int64
 
 	SentWrite  bool
@@ -318,12 +320,23 @@ func (ml *MessageLog) ResetUncommitted(fromCID uint64) {
 				e.Writes = nil
 				e.Accepts = nil
 				e.Propose = nil
+				e.Batch = nil
 				count++
 			}
 			e.mu.Unlock()
 		}
 	}
 	slog.Debug("ResetUncommitted", "from_cid", fromCID, "reset_count", count)
+}
+
+func (ml *MessageLog) SetLowWaterMark(cid uint64) {
+	ml.mu.Lock()
+	defer ml.mu.Unlock()
+	if cid > ml.lowWaterMark {
+		ml.lowWaterMark = cid
+		ml.highWaterMark = cid + WaterMarkWindow
+		ml.cond.Broadcast()
+	}
 }
 
 func (ml *MessageLog) Reset() {

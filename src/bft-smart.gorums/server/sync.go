@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/binary"
 	"log/slog"
 	"time"
 
@@ -9,11 +10,20 @@ import (
 	"github.com/relab/gorums"
 )
 
-const reqTimerTimeout = 3 * time.Second
+const reqTimerTimeout = 2 * time.Second
 
 // Two-stage request timer (Paper §III):
 //   first expiry  → forward request to leader
 //   second expiry → suspect leader, broadcast STOP
+
+func (s *BFTSmartServer) cancelAllReqTimers() {
+	s.reqTimersMu.Lock()
+	defer s.reqTimersMu.Unlock()
+	for ts, rt := range s.reqTimers {
+		rt.timer.Stop()
+		delete(s.reqTimers, ts)
+	}
+}
 
 func (s *BFTSmartServer) startReqTimer(ts int64) {
 	if s.leader {
@@ -86,6 +96,10 @@ func (s *BFTSmartServer) forwardToLeader(ts int64) {
 
 func (s *BFTSmartServer) sendStop() {
 	s.mu.Lock()
+	if s.inViewChange {
+		s.mu.Unlock()
+		return
+	}
 	newView := s.view + 1
 	s.inViewChange = true
 	s.mu.Unlock()
@@ -254,6 +268,39 @@ func (s *BFTSmartServer) enterNewView(newView uint32, nextCID uint64, pending []
 	if s.leader {
 		seen := make(map[int64]bool)
 		requeued := 0
+
+		// check inbound for newly joining nodes — enqueue RECONFIG as first batch
+		// so membership is updated atomically through consensus before client requests.
+		if s.getInboundConfig != nil {
+			inbound := s.getInboundConfig()
+			for _, n := range inbound.Nodes() {
+				id := n.ID()
+				s.mu.Lock()
+				known := s.originalNodes[id]
+				s.mu.Unlock()
+				if known {
+					continue
+				}
+				addr := n.Address()
+				slog.Info("new node detected, enqueuing RECONFIG",
+					"node", s.id, "target_id", id, "target_addr", addr)
+				payload := make([]byte, 4+len(addr))
+				binary.BigEndian.PutUint32(payload[:4], id)
+				copy(payload[4:], addr)
+				reconfigReq := pb.Request_builder{
+					Operation: pb.Operation_RECONFIG,
+					Timestamp: int64(id), // unique enough — node IDs are stable
+					Payload:   payload,
+				}.Build()
+				select {
+				case s.reqQueue <- reconfigReq:
+					requeued++
+					seen[int64(id)] = true
+				default:
+					slog.Warn("reqQueue full, dropping RECONFIG", "node", s.id, "target", id)
+				}
+			}
+		}
 
 		// first add from STOP union
 		for _, r := range pending {

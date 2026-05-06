@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -77,7 +78,13 @@ func (s *Server) Start(_ bool) {
 	}
 	s.sys = sys
 
+	originalNodes := make(map[uint32]bool, len(s.nodes))
+	for _, n := range s.nodes {
+		originalNodes[n.ID] = true
+	}
 	impl := NewBFTSmartServer(s.id, len(s.nodes))
+	impl.getInboundConfig = sys.Config
+	impl.originalNodes = originalNodes
 	sys.RegisterService(nil, func(gs *gorums.Server) {
 		pb.RegisterBFTSmartServer(gs, impl)
 	})
@@ -105,8 +112,32 @@ func (s *Server) Start(_ bool) {
 			if err := impl.SendStateTransfer(); err != nil {
 				log.Fatalf("state transfer failed: %v", err)
 			}
-			time.Sleep(3 * time.Second)
-			impl.sendStop()
+			slog.Info("state transfer done, submitting RECONFIG as View Manager", "node", s.id)
+
+			// build payload: 4 bytes node ID + address string
+			myAddr := s.addrOf(s.id)
+			payload := make([]byte, 4+len(myAddr))
+			binary.BigEndian.PutUint32(payload[:4], s.id)
+			copy(payload[4:], myAddr)
+
+			req := pb.Request_builder{
+				Operation: pb.Operation_RECONFIG,
+				Timestamp: time.Now().UnixNano(),
+				ClientId:  s.id, // identify ourselves
+				Payload:   payload,
+			}.Build()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			cfg := impl.outbound()
+			// threshold 1 — just need one replica to confirm it was ordered
+			_, err := pb.ClientRequest(cfg.Context(ctx), req).Threshold(1)
+			if err != nil {
+				slog.Warn("RECONFIG JOIN failed", "node", s.id, "err", err)
+			} else {
+				slog.Info("RECONFIG JOIN committed", "node", s.id)
+			}
 		}()
 	}
 
@@ -131,12 +162,6 @@ func (s *Server) waitForPeers(cfg gorums.Configuration, expected int) {
 // config for newly joining nodes. Both are handled in a single goroutine to
 // avoid races between two goroutines calling SetOutboundConfig concurrently.
 func (s *Server) watchMembership(ctx context.Context, impl *BFTSmartServer) {
-	// track which node IDs we have already sent ViewUpdate JOIN for
-	knownJoined := make(map[uint32]bool)
-	for _, n := range s.nodes {
-		knownJoined[n.ID] = true
-	}
-
 	outbound := s.sys.OutboundConfig()
 	ch := outbound.Watch(ctx, 2*time.Second, func(c gorums.Configuration) gorums.Configuration {
 		return c.SortBy(gorums.LastNodeError)
@@ -168,55 +193,12 @@ func (s *Server) watchMembership(ctx context.Context, impl *BFTSmartServer) {
 			impl.SetOutboundConfig(cfg)
 		}
 
-		// ── inbound: detect newly joined nodes (standbys) ─────────────────
-		// sys.Config() returns the inbound peer set — nodes whose streams
-		// are established to this server. Non-original nodes are standbys.
+		// log inbound peers for observability — join detection is handled
+		// in enterNewView via RECONFIG consensus, not here.
 		inbound := s.sys.Config()
+		impl.clusterSize = inbound.Size()
 		slog.Info("inbound peers", "node", s.id,
 			"inbound_size", inbound.Size(), "inbound_ids", inbound.NodeIDs())
-
-		impl.mu.Lock()
-		isLeader := impl.leader
-		view := impl.view
-		cid := impl.consensusID.Load()
-		impl.mu.Unlock()
-
-		for _, n := range inbound.Nodes() {
-			id := n.ID()
-			if knownJoined[id] {
-				continue
-			}
-			knownJoined[id] = true
-
-			slog.Info("new node visible in inbound", "node", s.id,
-				"new_node", id, "is_leader", isLeader)
-
-			if !isLeader {
-				continue
-			}
-
-			// leader adds the new node to outbound and notifies everyone
-			current := impl.outbound()
-			updated := current.Add(id)
-			impl.SetOutboundConfig(updated)
-			impl.mu.Lock()
-			impl.clusterSize++
-			impl.mu.Unlock()
-
-			slog.Info("sending ViewUpdate JOIN", "node", s.id,
-				"new_node", id, "new_view", view+1, "cluster_size", impl.clusterSize)
-
-			sig := sign(getPrivKey(s.id), viewUpdateDigest(view+1, id, cid))
-			pb.ViewUpdate(updated.Context(context.Background()),
-				pb.ViewUpdateMsg_builder{
-					NewView:     view + 1,
-					LeaderId:    s.id,
-					TargetId:    id,
-					ConsensusId: cid,
-					Action:      pb.MembershipAction_JOIN,
-					Signature:   sig,
-				}.Build(), gorums.IgnoreErrors())
-		}
 	}
 }
 

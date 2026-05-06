@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/binary"
 	"log/slog"
 	"os"
 	"sync"
@@ -49,6 +50,10 @@ type BFTSmartServer struct {
 	reqTimers   map[int64]*reqTimer
 
 	leaderRunning atomic.Bool
+
+	// reconfiguration support
+	getInboundConfig func() gorums.Configuration // returns sys.Config()
+	originalNodes    map[uint32]bool             // node IDs present at startup
 }
 
 type reqTimer struct {
@@ -64,9 +69,9 @@ func NewBFTSmartServer(id uint32, clusterSize int) *BFTSmartServer {
 		pending:      make(map[int64]chan<- *pb.Reply),
 		delivered:    make(map[int64]*pb.Reply),
 		msgLog:       NewMessageLog(),
-		reqQueue:     make(chan *pb.Request, 4000),
+		reqQueue:     make(chan *pb.Request, 10000),
 		deliverCh:    make(chan *ConsensusEntry, 2000),
-		batchMax:     100,
+		batchMax:     1000,
 		batchTimeout: 5 * time.Millisecond,
 		reqTimers:    make(map[int64]*reqTimer),
 	}
@@ -145,7 +150,10 @@ func (s *BFTSmartServer) proposeBatch(batch []*pb.Request) {
 func (s *BFTSmartServer) ClientRequest(ctx gorums.ServerCtx, request *pb.Request) (*pb.Reply, error) {
 	ts := request.GetTimestamp()
 	s.received.Add(1)
-	s.startReqTimer(ts)
+	// RECONFIG is a system operation — do not start a request timer
+	if request.GetOperation() != pb.Operation_RECONFIG {
+		s.startReqTimer(ts)
+	}
 
 	s.pendingMu.Lock()
 	if reply, ok := s.delivered[ts]; ok {
@@ -341,7 +349,7 @@ func (s *BFTSmartServer) deliver(e *ConsensusEntry) {
 }
 
 func (s *BFTSmartServer) runDeliver() {
-	var nextCID uint64 = 1
+	nextCID := s.consensusID.Load() + 1
 	buf := make(map[uint64]*ConsensusEntry)
 
 	for e := range s.deliverCh {
@@ -370,30 +378,124 @@ func (s *BFTSmartServer) executeEntry(e *ConsensusEntry) {
 	e.Executed = true
 	s.committed.Add(1)
 
-	for _, ts := range e.BatchTimestamps {
-		reply := pb.Reply_builder{
-			View: s.view, ReplicaId: s.id, Timestamp: ts, Result: []byte("ok"),
-		}.Build()
-		s.pendingMu.Lock()
-		ch, ok := s.pending[ts]
-		if ok {
-			delete(s.pending, ts)
-			s.pendingMu.Unlock()
-			ch <- reply
-		} else {
-			s.delivered[ts] = reply
-			s.pendingMu.Unlock()
+	// advance consensusID on every replica so STOP last_cid is correct
+	for {
+		cur := s.consensusID.Load()
+		if cur >= e.ConsensusID {
+			break
 		}
-		s.cancelReqTimer(ts)
+		if s.consensusID.CompareAndSwap(cur, e.ConsensusID) {
+			break
+		}
+	}
+
+	clientCount := 0
+	if e.Batch != nil {
+		// normal path — Propose was received, full batch is available
+		for _, req := range e.Batch {
+			if req.GetOperation() == pb.Operation_RECONFIG {
+				s.applyReconfig(req)
+				continue
+			}
+			ts := req.GetTimestamp()
+			reply := pb.Reply_builder{
+				View: s.view, ReplicaId: s.id, Timestamp: ts, Result: []byte("ok"),
+			}.Build()
+			s.pendingMu.Lock()
+			ch, ok := s.pending[ts]
+			if ok {
+				delete(s.pending, ts)
+				s.pendingMu.Unlock()
+				ch <- reply
+			} else {
+				s.delivered[ts] = reply
+				s.pendingMu.Unlock()
+			}
+			s.cancelReqTimer(ts)
+			clientCount++
+		}
+	} else if len(e.BatchTimestamps) > 0 {
+		// Propose arrived after delivery — timestamps known, batch content unknown
+		for _, ts := range e.BatchTimestamps {
+			reply := pb.Reply_builder{
+				View: s.view, ReplicaId: s.id, Timestamp: ts, Result: []byte("ok"),
+			}.Build()
+			s.pendingMu.Lock()
+			ch, ok := s.pending[ts]
+			if ok {
+				delete(s.pending, ts)
+				s.pendingMu.Unlock()
+				ch <- reply
+			} else {
+				s.delivered[ts] = reply
+				s.pendingMu.Unlock()
+			}
+			s.cancelReqTimer(ts)
+			clientCount++
+		}
+	} else {
+		// Propose never received (joined mid-stream) — cancel all pending
+		// timers since the batch is committed and any timer is now stale.
+		slog.Debug("executeEntry: no batch info, cancelling all timers",
+			"node", s.id, "cid", e.ConsensusID)
+		s.cancelAllReqTimers()
 	}
 
 	slog.Info("batch committed", "node", s.id, "cid", e.ConsensusID,
-		"batch_size", len(e.BatchTimestamps),
+		"batch_size", len(e.Batch), "client_reqs", clientCount,
 		"committed", s.committed.Load(), "received", s.received.Load())
 
 	if s.msgLog.ShouldCheckpoint(e.ConsensusID) {
 		s.sendCheckpoint(e.ConsensusID)
 	}
+}
+
+// applyReconfig applies a committed RECONFIG request. The payload encodes
+// the joining node ID (4 bytes) followed by the address as a string.
+// All replicas call this at the same consensus point so membership is
+// updated identically on every node.
+func (s *BFTSmartServer) applyReconfig(req *pb.Request) {
+	payload := req.GetPayload()
+	if len(payload) < 4 {
+		slog.Warn("applyReconfig: payload too short", "node", s.id, "len", len(payload))
+		return
+	}
+	targetID := binary.BigEndian.Uint32(payload[:4])
+	targetAddr := string(payload[4:])
+
+	current := s.outbound()
+	updated := current.Add(targetID)
+	// if err != nil {
+	// 	slog.Warn("applyReconfig: Extend failed", "node", s.id, "target", targetID, "err", err)
+	// 	return
+	// }
+	s.SetOutboundConfig(updated)
+	s.mu.Lock()
+	s.clusterSize = updated.Size()
+	if s.originalNodes != nil {
+		s.originalNodes[targetID] = true
+	}
+	s.mu.Unlock()
+
+	// unblock the View Manager client that submitted this request
+	ts := req.GetTimestamp()
+	reply := pb.Reply_builder{
+		View: s.view, ReplicaId: s.id, Timestamp: ts, Result: []byte("ok"),
+	}.Build()
+	s.pendingMu.Lock()
+	ch, ok := s.pending[ts]
+	if ok {
+		delete(s.pending, ts)
+		s.pendingMu.Unlock()
+		ch <- reply
+	} else {
+		s.delivered[ts] = reply
+		s.pendingMu.Unlock()
+	}
+
+	slog.Info("reconfig applied: JOIN", "node", s.id,
+		"target_id", targetID, "target_addr", targetAddr,
+		"cluster_size", updated.Size(), "config", updated.NodeIDs())
 }
 
 // Log mutation helpers
@@ -411,6 +513,7 @@ func (s *BFTSmartServer) recordPropose(cid uint64, timestamps []int64, batch []*
 		return false
 	}
 	e.View = s.view
+	e.Batch = batch
 	e.BatchTimestamps = timestamps
 	e.SentWrite = true
 	e.Propose = &ProposeRecord{

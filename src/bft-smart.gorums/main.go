@@ -53,7 +53,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "invalid node ID %d\n", nid)
 				os.Exit(1)
 			}
-			server.RunServer(nid, nodes, *verbose, false)
+			server.RunServer(nid, append(slices.Clone(nodes), standbys...), *verbose, false)
 		}
 
 	case "client":
