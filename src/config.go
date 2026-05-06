@@ -32,6 +32,8 @@ func getConfig() (srvs, clients ServerEntry) {
 		if benchType == "4" || benchType == "5" || benchType == "6" {
 			confType = "pbft"
 		} else if benchType == "7" {
+			confType = "paxos"
+		} else if benchType == "8" {
 			confType = "simplex"
 		}
 	}
@@ -69,7 +71,8 @@ var mapping mappingType = map[int]string{
 	4: bench.PBFTWithGorums,
 	5: bench.PBFTWithoutGorums,
 	6: bench.PBFTGorumsNew,
-	7: bench.SimplexGorums,
+	7: bench.PaxosATA,
+	8: bench.SimplexGorums,
 }
 
 func (m mappingType) String() string {
@@ -81,5 +84,6 @@ func (m mappingType) String() string {
 	ret += "\t5: " + m[5] + "\n"
 	ret += "\t6: " + m[6] + "\n"
 	ret += "\t7: " + m[7] + "\n"
+	ret += "\t8: " + m[8] + "\n"
 	return ret
 }

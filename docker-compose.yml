@@ -1,5 +1,6 @@
 services:
   srv1:
+    image: my-bench-server:latest
     build:
       context: .
       dockerfile: src/Dockerfile.Server
@@ -8,16 +9,13 @@ services:
       - ID=1
       - SERVER=1
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
-      - LOG=${LOG}
+      - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
-    deploy:
-      placement:
-        constraints: [node.hostname == node-1]
 
   srv2:
+    image: my-bench-server:latest
     build:
       context: .
       dockerfile: src/Dockerfile.Server
@@ -26,16 +24,13 @@ services:
       - ID=2
       - SERVER=1
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
-      - LOG=${LOG}
+      - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
-    deploy:
-      placement:
-        constraints: [node.hostname == node-2]
 
   srv3:
+    image: my-bench-server:latest
     build:
       context: .
       dockerfile: src/Dockerfile.Server
@@ -44,16 +39,13 @@ services:
       - ID=3
       - SERVER=1
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
-      - LOG=${LOG}
+      - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
-    deploy:
-      placement:
-        constraints: [node.hostname == node-3]
 
   srv4:
+    image: my-bench-server:latest
     build:
       context: .
       dockerfile: src/Dockerfile.Server
@@ -62,16 +54,13 @@ services:
       - ID=4
       - SERVER=1
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
-      - LOG=${LOG}
+      - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
-    deploy:
-      placement:
-        constraints: [node.hostname == node-4]
 
   srv5:
+    image: my-bench-server:latest
     build:
       context: .
       dockerfile: src/Dockerfile.Server
@@ -80,13 +69,13 @@ services:
       - ID=5
       - SERVER=1
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
-      - LOG=${LOG}
+      - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
 
   srv6:
+    image: my-bench-server:latest
     build:
       context: .
       dockerfile: src/Dockerfile.Server
@@ -95,13 +84,13 @@ services:
       - ID=6
       - SERVER=1
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
-      - LOG=${LOG}
+      - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
 
   srv7:
+    image: my-bench-server:latest
     build:
       context: .
       dockerfile: src/Dockerfile.Server
@@ -110,13 +99,13 @@ services:
       - ID=7
       - SERVER=1
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
-      - LOG=${LOG}
+      - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
 
   client:
+    image: my-bench-client:latest
     build:
       context: .
       dockerfile: src/Dockerfile.Client
@@ -124,13 +113,12 @@ services:
     environment:
       - SERVER=0
       - CONF=${CONF}
-      - PRODUCTION=${PRODUCTION}
       - BENCH=${BENCH}
       - THROUGHPUT=${THROUGHPUT}
       - STEPS=${STEPS}
       - RUNS=${RUNS}
       - DUR=${DUR}
-      - LOG=${LOG}
+      - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
       - ./csv:/app/src/csv

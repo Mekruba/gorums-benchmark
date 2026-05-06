@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	bench "github.com/Mekruba/gorums-benchmark/benchmark"
+	paxosataServer "github.com/Mekruba/gorums-benchmark/paxos.ata/server"
 	pbftGorumsNew "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
 	simplexGorumsNew "github.com/Mekruba/gorums-benchmark/simplex.gorums/server"
 	"github.com/joho/godotenv"
@@ -272,6 +273,12 @@ func runServer(benchType string, id int, srvAddrs map[int]Server, withLogger, me
 	case bench.SimplexGorums:
 		simplexGorumsNew.InitKeys(len(srvAddrs))
 		srv = simplexGorumsNew.New(uint32(id), srvAddresses[id], srvAddresses)
+	case bench.PaxosATA:
+		addrs := make([]string, len(srvAddrs)+1)
+		for _, s := range srvAddrs {
+			addrs[s.ID] = fmt.Sprintf("%s:%s", s.Addr, s.Port)
+		}
+		srv = paxosataServer.New(srvAddresses[id], addrs)
 	default:
 		fmt.Fprintf(os.Stderr, "Error: no server implementation for benchmark type %q\n", benchType)
 		os.Exit(1)
