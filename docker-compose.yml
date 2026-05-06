@@ -8,11 +8,17 @@ services:
     environment:
       - ID=1
       - SERVER=1
-      - CONF=${CONF}
+      - CONF=${CONF:-local}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 5s
 
   srv2:
     image: my-bench-server:latest
@@ -23,11 +29,17 @@ services:
     environment:
       - ID=2
       - SERVER=1
-      - CONF=${CONF}
+      - CONF=${CONF:-local}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8081"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 5s
 
   srv3:
     image: my-bench-server:latest
@@ -38,11 +50,17 @@ services:
     environment:
       - ID=3
       - SERVER=1
-      - CONF=${CONF}
+      - CONF=${CONF:-local}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8082"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 5s
 
   srv4:
     image: my-bench-server:latest
@@ -53,11 +71,17 @@ services:
     environment:
       - ID=4
       - SERVER=1
-      - CONF=${CONF}
+      - CONF=${CONF:-local}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8083"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 5s
 
   srv5:
     image: my-bench-server:latest
@@ -68,11 +92,17 @@ services:
     environment:
       - ID=5
       - SERVER=1
-      - CONF=${CONF}
+      - CONF=${CONF:-local}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8084"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 5s
 
   srv6:
     image: my-bench-server:latest
@@ -83,11 +113,17 @@ services:
     environment:
       - ID=6
       - SERVER=1
-      - CONF=${CONF}
+      - CONF=${CONF:-local}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8085"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 5s
 
   srv7:
     image: my-bench-server:latest
@@ -98,11 +134,17 @@ services:
     environment:
       - ID=7
       - SERVER=1
-      - CONF=${CONF}
+      - CONF=${CONF:-local}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
       - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8086"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 5s
 
   client:
     image: my-bench-client:latest
@@ -112,7 +154,7 @@ services:
     network_mode: "host"
     environment:
       - SERVER=0
-      - CONF=${CONF}
+      - CONF=${CONF:-local}
       - BENCH=${BENCH}
       - THROUGHPUT=${THROUGHPUT}
       - STEPS=${STEPS}
@@ -122,3 +164,18 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./csv:/app/src/csv
+    depends_on:
+      srv1:
+        condition: service_healthy
+      srv2:
+        condition: service_healthy
+      srv3:
+        condition: service_healthy
+      srv4:
+        condition: service_healthy
+      srv5:
+        condition: service_healthy
+      srv6:
+        condition: service_healthy
+      srv7:
+        condition: service_healthy
