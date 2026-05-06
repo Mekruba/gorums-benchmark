@@ -9,6 +9,7 @@ const (
 	PBFTWithGorums                 string = "PBFT.With.Gorums"
 	PBFTWithoutGorums              string = "PBFT.Without.Gorums"
 	PBFTGorumsNew                  string = "PBFT.Gorums.New"
+	PaxosATA                       string = "Paxos.ATA"
 )
 
 type initializable interface {
@@ -27,6 +28,14 @@ var benchTypes = map[string]benchStruct{
 		},
 		init: func() initializable {
 			return &PbftGorumsNewBenchmark{}
+		},
+	},
+	PaxosATA: {
+		run: func(opts benchmarkOption, bench any) (ClientResult, []Result, error) {
+			return runBenchmark(opts, bench.(*PaxosATABenchmark))
+		},
+		init: func() initializable {
+			return &PaxosATABenchmark{}
 		},
 	},
 }

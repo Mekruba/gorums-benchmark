@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	bench "github.com/Mekruba/gorums-benchmark/benchmark"
+	paxosataServer "github.com/Mekruba/gorums-benchmark/paxos.ata/server"
 	pbftGorumsNew "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
 	"github.com/joho/godotenv"
 )
@@ -200,9 +201,12 @@ func runBenchmark(name string, clients ServerEntry, throughput, numClients, clie
 			fmt.Fprintln(os.Stderr, "Error: srvAddrs cannot be nil when not running locally")
 			os.Exit(1)
 		}
-		srvAddresses = make([]string, len(srvAddrs)+1)
-		for _, srv := range srvAddrs {
-			srvAddresses[srv.ID] = fmt.Sprintf("%s:%s", srv.Addr, srv.Port)
+		srvAddresses = make([]string, 0, len(srvAddrs))
+		for i := 1; i <= len(srvAddrs); i++ {
+			srv, ok := srvAddrs[i]
+			if ok {
+				srvAddresses = append(srvAddresses, fmt.Sprintf("%s:%s", srv.Addr, srv.Port))
+			}
 		}
 		options = append(options, bench.WithSrvAddrs(srvAddresses))
 	}
@@ -266,6 +270,12 @@ func runServer(benchType string, id int, srvAddrs map[int]Server, withLogger, me
 	switch benchType {
 	case bench.PBFTGorumsNew:
 		srv = pbftGorumsNew.New(uint32(id), srvAddresses)
+	case bench.PaxosATA:
+		addrs := make([]string, len(srvAddrs)+1)
+		for _, s := range srvAddrs {
+			addrs[s.ID] = fmt.Sprintf("%s:%s", s.Addr, s.Port)
+		}
+		srv = paxosataServer.New(srvAddresses[id], addrs)
 	default:
 		fmt.Fprintf(os.Stderr, "Error: no server implementation for benchmark type %q\n", benchType)
 		os.Exit(1)

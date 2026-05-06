@@ -36,3 +36,4 @@ src/pbft.gorums.new/pbft
 
 # Go workspace file
 go.work
+.venv/
