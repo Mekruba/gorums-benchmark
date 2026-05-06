@@ -214,6 +214,9 @@ func Runs(runs int) RunOption {
 type RunOption func(*RunOptions)
 
 func RunBenchmark(name string, options ...RunOption) {
+	if err := os.MkdirAll("./csv", 0o755); err != nil {
+		panic(err)
+	}
 	opts := RunOptions{
 		local:          true,
 		srvAddrs:       threeServers,

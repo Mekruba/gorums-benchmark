@@ -1,75 +1,80 @@
-.PHONY: proto docker clean eval setup local-up local-down deploy stop
+.PHONY: proto clean network \
+        local-up local-down \
+        dist-srv dist-client \
+        pbft-srv pbft-client \
+        paxos-srv paxos-client \
+        simplex-srv simplex-client \
+        histogram
 
 # --- NETWORK SETUP ---
-# For local testing
+# For local testing (bridge network)
 network:
 	docker network create --gateway 10.0.0.1 --subnet 10.0.0.0/16 MasterLab
 
-# For Swarm testing (Run once on Manager)
-setup:
-	@if ! docker info | grep -q "Swarm: active"; then \
-		docker swarm init --advertise-addr $(shell hostname -I | awk '{print $$1}'); \
-	fi
-	docker network create --driver overlay --attachable --subnet 10.0.0.0/16 MasterLab
-
-# --- LOCAL EXECUTION ---
-docker:
+# --- LOCAL EXECUTION (all-in-one) ---
+# Runs all 7 servers + client locally using CONF=local (default).
+# Example: make local-up BENCH=6 THROUGHPUT=1000 STEPS=10 RUNS=1 DUR=10
+local-up:
+ifndef BENCH
+	$(error BENCH is not set. Example: make local-up BENCH=6 THROUGHPUT=1000 STEPS=1 RUNS=1 DUR=10)
+endif
+	mkdir -p csv logs
 	docker compose up --build
 
-local-up:
-	docker compose -f docker-compose.local.yml up --build
-
 local-down:
-	docker compose -f docker-compose.local.yml down
+	docker compose down
 
-# --- DISTRIBUTED EXECUTION (host network, no swarm) ---
-# Run on each VM: make dist-srv ID=1
+# --- GENERIC DISTRIBUTED EXECUTION (host network) ---
+# On each VM: make dist-srv ID=<n> BENCH=<n> CONF=<paxos|pbft|simplex>
+# On client after all servers up: make dist-client BENCH=<n> CONF=<paxos|pbft|simplex>
 dist-srv:
-	docker compose -f docker-compose.local.yml up srv$(ID) --build
+ifndef ID
+	$(error ID is not set. Example: make dist-srv ID=1 BENCH=7 CONF=paxos)
+endif
+	docker compose up srv$(ID) --build --no-deps
 
-# Run on client node after all servers are up
 dist-client:
-	docker compose -f docker-compose.local.yml up client --build --no-deps
-
-# --- DISTRIBUTED PAXOS (host network, no swarm) ---
-# On each node run: make paxos-srv ID=<1..N>
-paxos-srv:
-	docker compose up srv$(ID) --build
-
-# On node-1 after all servers are up:
-# THROUGHPUT=1000 STEPS=10 RUNS=1 DUR=10 make paxos-client
-paxos-client:
 	mkdir -p csv logs
 	docker compose up client --build --no-deps
 
-# --- DYNAMIC COMPOSE GENERATION ---
-# Generate docker-compose with N servers:  make gen-compose N=3
-# Generate for local mode:                 make gen-compose N=3 MODE=local
-# Then use:  docker compose -f docker-compose.generated.yml up srv$(ID) --build
-N ?= 7
-MODE ?= paxos
-gen-compose:
-	./generate-compose.sh $(N) $(MODE)
+# --- PBFT (BENCH=6) ---
+# On each node: make pbft-srv ID=<1..4>
+# On client:    THROUGHPUT=1000 STEPS=10 RUNS=1 DUR=10 make pbft-client
+pbft-srv:
+ifndef ID
+	$(error ID is not set. Example: make pbft-srv ID=1)
+endif
+	BENCH=6 CONF=pbft docker compose up srv$(ID) --build --no-deps
 
-# Run server/client using the generated compose file
-gen-srv:
-	docker compose -f docker-compose.generated.yml up srv$(ID) --build
-
-gen-client:
+pbft-client:
 	mkdir -p csv logs
-	docker compose -f docker-compose.generated.yml up client --build --no-deps
+	BENCH=6 CONF=pbft docker compose up client --build --no-deps
 
-# --- DISTRIBUTED EXECUTION (Swarm) ---
-deploy:
-	docker stack deploy -c docker-compose.yml bench_stack
+# --- PAXOS ATA (BENCH=7) ---
+# On each node: make paxos-srv ID=<1..7>
+# On client:    THROUGHPUT=1000 STEPS=10 RUNS=1 DUR=10 make paxos-client
+paxos-srv:
+ifndef ID
+	$(error ID is not set. Example: make paxos-srv ID=1)
+endif
+	BENCH=7 CONF=paxos docker compose up srv$(ID) --build --no-deps
 
-stop:
-	docker stack rm bench_stack
+paxos-client:
+	mkdir -p csv logs
+	BENCH=7 CONF=paxos docker compose up client --build --no-deps
 
-# --- EVALUATION ---
-eval:
-	docker compose down
-	docker compose up --build
+# --- SIMPLEX (BENCH=8) ---
+# On each node: make simplex-srv ID=<1..7>
+# On client:    THROUGHPUT=1000 STEPS=10 RUNS=1 DUR=10 make simplex-client
+simplex-srv:
+ifndef ID
+	$(error ID is not set. Example: make simplex-srv ID=1)
+endif
+	BENCH=8 CONF=simplex docker compose up srv$(ID) --build --no-deps
+
+simplex-client:
+	mkdir -p csv logs
+	BENCH=8 CONF=simplex docker compose up client --build --no-deps
 
 # --- UTILS ---
 wd := $(shell pwd)

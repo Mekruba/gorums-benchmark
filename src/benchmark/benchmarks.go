@@ -1,6 +1,11 @@
 package bench
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+
+	simplexserver "github.com/Mekruba/gorums-benchmark/simplex.gorums/server"
+)
 
 const (
 	PaxosBroadcastCall             string = "Paxos.BroadcastCall"
@@ -10,6 +15,7 @@ const (
 	PBFTWithoutGorums              string = "PBFT.Without.Gorums"
 	PBFTGorumsNew                  string = "PBFT.Gorums.New"
 	PaxosATA                       string = "Paxos.ATA"
+	SimplexGorums                  string = "Simplex.Gorums"
 )
 
 type initializable interface {
@@ -36,6 +42,24 @@ var benchTypes = map[string]benchStruct{
 		},
 		init: func() initializable {
 			return &PaxosATABenchmark{}
+		},
+	},
+	SimplexGorums: {
+		run: func(opts benchmarkOption, bench any) (ClientResult, []Result, error) {
+			return runBenchmark(opts, bench.(*SimplexGorumsBenchmark))
+		},
+		init: func() initializable {
+			b := &SimplexGorumsBenchmark{}
+			// Start with 4 active members; nodes 5–7 are standbys.
+			// The per-node failure detector will automatically promote a
+			// standby when an active member becomes unresponsive.
+			b.SetInitialMembers([]uint32{1, 2, 3, 4})
+			b.SetFailureDetector(simplexserver.FailureDetectorConfig{
+				ProbeInterval: 500 * time.Millisecond,
+				MissThreshold: 3, // declare failed after 1.5 s of silence
+				StandbyPool:   []uint32{5, 6, 7},
+			})
+			return b
 		},
 	},
 }

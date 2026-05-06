@@ -122,7 +122,7 @@ func (c *Client) tryPropose(instance uint32, value string) error {
 		var promiseCount int
 		var highestAcceptedNum uint32
 		var highestAcceptedValue string
-		for resp := range responses.Seq() {
+		for resp := range responses.Results() {
 			if resp.Err != nil {
 				continue
 			}
@@ -177,7 +177,7 @@ func (c *Client) tryPropose(instance uint32, value string) error {
 
 	quorumSize := int(c.cfg.Size())/2 + 1
 	var acceptCount int
-	for accepted := range accepteds.Seq() {
+	for accepted := range accepteds.Results() {
 		if accepted.Err != nil {
 			continue
 		}
@@ -203,7 +203,7 @@ func (c *Client) tryPropose(instance uint32, value string) error {
 		Value:       valueToPropose,
 		ProposerId:  c.id,
 	}.Build())
-	for range learned.Seq() {
+	for range learned.Results() {
 		// drain
 	}
 
