@@ -27,9 +27,14 @@ type ClientResult struct {
 	LatencyStdev    float64
 	TotalDur        time.Duration
 	Throughput      float64
-	ReqDistribution []uint64 // shows how many request in transit per unit of time
-	BucketSize      int      // number of microseconds
-	Durations       []time.Duration
+	ReqDistribution []uint64        // shows how many request in transit per unit of time
+	BucketSize      int             // number of microseconds
+	Durations       []time.Duration // sorted, for percentile calculations
+	// TimedStartsMs and TimedDurations are in response-arrival order (NOT sorted).
+	// Together they form a time series: ElapsedMs since collection started → latency.
+	// Used to produce a time-series CSV that shows latency spikes during reconfiguration.
+	TimedStartsMs  []int64
+	TimedDurations []time.Duration
 }
 
 type Result struct {
@@ -286,6 +291,12 @@ func runThroughputVsLatencyBenchmark(benchmark benchStruct, benchmarkState initi
 		if err != nil {
 			panic(err)
 		}
+		if len(clientResult.TimedStartsMs) > 0 {
+			if err = WriteTimedDurations(fmt.Sprintf("%s.T%v.R%v.timed", name, target, runNumber),
+				clientResult.TimedStartsMs, clientResult.TimedDurations); err != nil {
+				panic(err)
+			}
+		}
 		fmt.Println("done")
 		time.Sleep(1 * time.Second)
 	}
@@ -420,6 +431,10 @@ func runBenchmark[S, C any](opts benchmarkOption, benchmark Benchmark[S, C]) (Cl
 		avgDur := time.Duration(0)
 		numFailed := 0
 		graceTime := 15 * time.Second
+		// Time-series tracking: capture wall-clock start time when collection begins.
+		collectionStart := time.Now()
+		timedStarts := make([]int64, 0, totalNumReqs)
+		timedDurs := make([]time.Duration, 0, totalNumReqs)
 		for i := 0; i < totalNumReqs; i++ {
 			if i%(opts.numRequests/2) == 0 {
 				fmt.Printf("%v%s done\n", (100 * float64(i) / float64(totalNumReqs)), "%")
@@ -450,12 +465,19 @@ func runBenchmark[S, C any](opts benchmarkOption, benchmark Benchmark[S, C]) (Cl
 			dur := res.end.Sub(res.start)
 			avgDur += dur
 			durations[i] = dur
+			// Collect time-series data: elapsed ms from collection start and latency, in arrival order.
+			timedStarts = append(timedStarts, res.start.Sub(collectionStart).Milliseconds())
+			timedDurs = append(timedDurs, dur)
 		}
 		// wait a short time to make the servers finish up before sending a "purge state msg" to them
 		time.Sleep(2 * time.Second)
 		fmt.Printf("100%s done, numFailed: %v out of %v\n", "%", numFailed, totalNumReqs)
 		benchmark.StopBenchmark(config)
 		fmt.Println("stopped benchmark...")
+
+		// Save time-ordered (arrival-order) data BEFORE sorting.
+		clientResult.TimedStartsMs = timedStarts
+		clientResult.TimedDurations = timedDurs
 
 		avgDur /= time.Duration(totalNumReqs)
 		// sort the durations to calculate median
