@@ -371,6 +371,9 @@ func runBenchmark[S, C any](opts benchmarkOption, benchmark Benchmark[S, C]) (Cl
 		fmt.Println("creating servers...")
 		servers = make([]*S, len(opts.srvAddrs))
 		for i, addr := range opts.srvAddrs {
+			if addr == "" {
+				continue
+			}
 			var (
 				err     error
 				cleanup func()

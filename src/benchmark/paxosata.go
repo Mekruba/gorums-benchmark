@@ -14,6 +14,7 @@ import (
 // using the gorums-ata Multi-Paxos protocol with the new gorums v0.11 API.
 type PaxosATABenchmark struct {
 	clients []*paxosataClient.Client
+	local   bool // true when servers are spawned in-process by the benchmark framework
 }
 
 func (*PaxosATABenchmark) CreateServer(addr string, srvAddrs []string) (*paxosataServer.PaxosServer, func(), error) {
@@ -25,9 +26,16 @@ func (*PaxosATABenchmark) CreateServer(addr string, srvAddrs []string) (*paxosat
 }
 
 func (b *PaxosATABenchmark) Init(opts RunOptions) {
+	b.local = opts.local
 	b.clients = make([]*paxosataClient.Client, 0, opts.numClients)
 	createClients(b, opts)
-	warmupFunc(b.clients, b.warmup)
+	// In local mode the servers haven't been created yet (runBenchmark does that
+	// after Init returns), so warmup would accumulate gRPC backoff and prevent
+	// connections from being established in time. Warmup is deferred to
+	// StartBenchmark, which is called after the servers are running.
+	if !opts.local {
+		warmupFunc(b.clients, b.warmup)
+	}
 	b.setStrides()
 }
 
@@ -54,8 +62,16 @@ func (b *PaxosATABenchmark) Stop() {
 }
 
 func (b *PaxosATABenchmark) AddClient(id int, addr string, srvAddrs []string, logger *slog.Logger) {
-	qSize := 1 + len(srvAddrs)/2
-	b.clients = append(b.clients, paxosataClient.New(id, addr, srvAddrs, qSize, logger))
+	// Filter empty addresses (index 0 is always "" in the 1-based slice built by
+	// main.go) to avoid creating a gorums node for ":0" that inflates quorum size.
+	var filtered []string
+	for _, a := range srvAddrs {
+		if a != "" {
+			filtered = append(filtered, a)
+		}
+	}
+	qSize := 1 + len(filtered)/2
+	b.clients = append(b.clients, paxosataClient.New(id, addr, filtered, qSize, logger))
 }
 
 func (*PaxosATABenchmark) warmup(client *paxosataClient.Client) {
@@ -72,6 +88,11 @@ func (*PaxosATABenchmark) warmup(client *paxosataClient.Client) {
 }
 
 func (b *PaxosATABenchmark) StartBenchmark(_ *paxosataClient.Client) []Result {
+	// In local mode the servers have just been started by runBenchmark; run
+	// warmup now so gRPC connections are established before the timed window.
+	if b.local {
+		warmupFunc(b.clients, b.warmup)
+	}
 	// Reset client strides so each run starts from a clean slate.
 	b.setStrides()
 	return nil
