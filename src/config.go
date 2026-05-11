@@ -26,12 +26,17 @@ type Config struct {
 func getConfig() (srvs, clients ServerEntry) {
 	confType := os.Getenv("CONF")
 	if confType == "" {
+		// Auto-select config based on benchmark type only when CONF is not explicitly set.
 		confType = "local"
+		benchType := os.Getenv("BENCH")
+		if benchType == "4" || benchType == "5" || benchType == "6" {
+			confType = "pbft"
+		} else if benchType == "7" {
+			confType = "paxos"
+		} else if benchType == "8" {
+			confType = "simplex"
+		}
 	}
-	// benchType := os.Getenv("BENCH")
-	// if benchType == "4" || benchType == "5" || benchType == "6" {
-	// 	confType = "pbft"
-	// }
 	confPath := fmt.Sprintf("conf.%s.yaml", confType)
 	data, err := os.ReadFile(confPath)
 	if err != nil {
@@ -67,7 +72,8 @@ var mapping mappingType = map[int]string{
 	5: bench.PBFTWithoutGorums,
 	6: bench.PBFTGorumsNew,
 	7: bench.PaxosATA,
-	8: bench.BFTSmartGorums,
+	8: bench.SimplexGorums,
+	9: bench.BFTSmartGorums,
 }
 
 func (m mappingType) String() string {
@@ -79,5 +85,6 @@ func (m mappingType) String() string {
 	ret += "\t5: " + m[5] + "\n"
 	ret += "\t6: " + m[6] + "\n"
 	ret += "\t7: " + m[7] + "\n"
+	ret += "\t8: " + m[8] + "\n"
 	return ret
 }

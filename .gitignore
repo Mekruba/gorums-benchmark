@@ -39,3 +39,4 @@ src/bft-smart.gorums/bftsmart
 
 # Go workspace file
 go.work
+.venv/

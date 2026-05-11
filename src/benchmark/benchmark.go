@@ -221,6 +221,9 @@ func KillPrimaryAfter(d time.Duration) RunOption {
 type RunOption func(*RunOptions)
 
 func RunBenchmark(name string, options ...RunOption) {
+	if err := os.MkdirAll("./csv", 0o755); err != nil {
+		panic(err)
+	}
 	opts := RunOptions{
 		local:          true,
 		srvAddrs:       threeServers,
@@ -375,6 +378,9 @@ func runBenchmark[S, C any](opts benchmarkOption, benchmark Benchmark[S, C]) (Cl
 		fmt.Println("creating servers...")
 		servers = make([]*S, len(opts.srvAddrs))
 		for i, addr := range opts.srvAddrs {
+			if addr == "" {
+				continue
+			}
 			var (
 				err     error
 				cleanup func()
