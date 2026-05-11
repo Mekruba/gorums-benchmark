@@ -57,12 +57,12 @@ var benchTypes = map[string]benchStruct{
 		},
 		init: func() initializable {
 			b := &SimplexGorumsBenchmark{}
-			// Start with 4 active members (quorum=3); nodes 5–7 are standbys.
-			// After 30 s a reconfiguration tx expands active membership to all
-			// 7 nodes (quorum=5). The resulting .timed.csv shows the latency
+			// Start with 4 active members (quorum=3); node 5 is the standby.
+			// After 30 s a reconfiguration tx expands active membership to
+			// nodes 1–5 (quorum=4). The resulting .timed.csv shows the latency
 			// spike caused by the reconfiguration round.
 			b.SetInitialMembers([]uint32{1, 2, 3, 4})
-			b.SetReconfig(30*time.Second, []uint32{1, 2, 3, 4, 5, 6, 7})
+			b.SetReconfig(30*time.Second, []uint32{1, 2, 3, 4, 5})
 			return b
 		},
 	},
