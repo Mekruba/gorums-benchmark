@@ -160,7 +160,8 @@ services:
       - STEPS=${STEPS}
       - RUNS=${RUNS}
       - DUR=${DUR}
-      - LOG=${LOG:-0}
+      - LOG=${LOG}
+      - KILLPRIMARY=${KILLPRIMARY}
     volumes:
       - ./logs:/app/logs
       - ./csv:/app/src/csv

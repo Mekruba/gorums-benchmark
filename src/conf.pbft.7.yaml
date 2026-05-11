@@ -15,18 +15,18 @@ servers:
       id: 4
       addr: "localhost"
       port: "8083"
-  # - 5:
-  #     id: 5
-  #     addr: "localhost"
-  #     port: "8084"
-  # - 6:
-  #     id: 6
-  #     addr: "localhost"
-  #     port: "8085"
-  # - 7:
-  #     id: 7
-  #     addr: "localhost"
-  #     port: "8086"
+  - 5:
+      id: 5
+      addr: "localhost"
+      port: "8084"
+  - 6:
+      id: 6
+      addr: "localhost"
+      port: "8085"
+  - 7:
+      id: 7
+      addr: "localhost"
+      port: "8086"
 clients:
   - 1:
       id: 1

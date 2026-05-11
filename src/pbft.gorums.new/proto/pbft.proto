@@ -23,9 +23,37 @@ service PBFT {
   rpc Commit(CommitMsg) returns (google.protobuf.Empty) {
     option (gorums.multicast) = true;
   }
+
+  // Replica broadcasts view-change to all replicas when primary seems faulty.
+  rpc ViewChange(ViewChangeMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+  // New primary multicasts new-view to all replicas after collecting 2f view-changes.
+  rpc NewView(NewViewMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+  // Replica multicasts checkpoint to all replicas periodically.
+  rpc Checkpoint(CheckpointMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+
+  // Standby pulls log state from any live replica before joining the cluster.
+  // Returns the last stable checkpoint plus its 2f+1 proof messages so the
+  // standby can fast-forward its MessageLog and water marks.
+  rpc StateTransfer(StateTransferRequest) returns (StateTransferResponse) {
+    option (gorums.quorumcall) = true;
+  }
+
   // Resets server state between benchmark steps.
   rpc Benchmark(google.protobuf.Empty) returns (google.protobuf.Empty) {
     option (gorums.multicast) = true;
+  }
+  // Ping is used to probe connectivity between replicas.
+  rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option (gorums.quorumcall) = true;
+  }
+  rpc Kill(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
   }
 }
 enum Operation {
@@ -51,25 +79,80 @@ message Reply {
 // Pre-Prepare message (Section 4.2)
 // <<PRE-PREPARE, v, n, d>, m>
 message PrePrepareMsg {
-  uint32 view = 1;     // v: view number
-  uint64 sequence = 2; // n: sequence number
-  bytes digest = 3;    // d: digest of the request
-  Request request = 4; // m: the actual request (piggybacked)
-  int64 timestamp = 5; // t: timestamp for exactly-once semantics
+  uint32 view = 1;      // v: view number
+  uint64 sequence = 2;  // n: sequence number
+  int64 timestamp = 3;  // t: timestamp linking to client request
+  bytes digest = 4;     // d: SHA256 digest of the request
+  bytes signature = 5;  // Ed25519 signature over view+sequence+digest
 }
+
 // Prepare message (Section 4.2)
 // <PREPARE, v, n, d, i>
 message PrepareMsg {
   uint32 view = 1;       // v: view number
   uint64 sequence = 2;   // n: sequence number
-  bytes digest = 3;      // d: digest of the request
-  uint32 replica_id = 4; // i: replica identifier
+  uint32 replica_id = 3; // i: replica identifier
+  bytes digest = 4;      // d: SHA256 digest of the request
+  bytes signature = 5;   // Ed25519 signature over view+sequence+digest
 }
+
 // Commit message (Section 4.2)
 // <COMMIT, v, n, d, i>
 message CommitMsg {
   uint32 view = 1;       // v: view number
   uint64 sequence = 2;   // n: sequence number
-  bytes digest = 3;      // d: digest of the request
-  uint32 replica_id = 4; // i: replica identifier
+  uint32 replica_id = 3; // i: replica identifier
+  bytes digest = 4;      // d: SHA256 digest of the request
+  bytes signature = 5;   // Ed25519 signature over view+sequence+digest
+}
+
+// Checkpoint message (Section 4.3)
+// <CHECKPOINT, n, d, i>
+message CheckpointMsg {
+  uint64 sequence = 1;   // n: sequence number of last executed request
+  uint32 replica_id = 2; // i: replica identifier
+  bytes digest = 3;      // d: SHA256 digest of the state
+  bytes signature = 4;   // Ed25519 signature over sequence+digest
+}
+
+// View-change message (Section 4.4)
+// <VIEW-CHANGE, v+1, n, C, P, i>
+message ViewChangeMsg {
+  uint32 new_view = 1;             // v+1: view to change to
+  uint64 last_stable_seq = 2;      // n: sequence number of last stable checkpoint
+  uint32 replica_id = 3;           // i: replica identifier
+  repeated bytes checkpoint_proof = 4; // C: 2f+1 checkpoint messages
+  repeated PreparedSet prepared = 5;   // P: prepared requests above n
+  bytes signature = 6;             // Ed25519 signature over new_view+last_stable_seq
+}
+
+// New-view message (Section 4.4)
+// <NEW-VIEW, v+1, V, O>
+message NewViewMsg {
+  uint32 new_view = 1;                    // v+1: new view number
+  uint32 replica_id = 2;                  // i: replica identifier (new primary)
+  repeated ViewChangeMsg view_changes = 3; // V: 2f+1 valid view-change messages
+  repeated PrePrepareMsg pre_prepares = 4; // O: set of new pre-prepare messages
+  bytes signature = 5;                    // Ed25519 signature over new_view
+}
+
+// PreparedSet holds proof that a request prepared at a given sequence number
+message PreparedSet {
+  PrePrepareMsg pre_prepare = 1;    // valid pre-prepare (without client message)
+  repeated PrepareMsg prepares = 2; // 2f matching prepare messages
+}
+
+message StateTransferRequest {
+  uint32 replica_id = 1;
+  bytes signature = 2;  // Ed25519 signature over replica_id
+}
+
+message StateTransferResponse {
+  uint64 last_stable_seq = 1;
+  uint64 low_water_mark = 2;
+  uint64 high_water_mark = 3;
+  uint32 view = 4;
+  repeated CheckpointMsg checkpoint_proof = 5;
+  uint32 replica_id = 6;  // responding replica, needed to verify sig
+  bytes signature = 7;    // Ed25519 signature over last_stable_seq+view+replica_id
 }

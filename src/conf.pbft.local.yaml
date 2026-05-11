@@ -2,31 +2,19 @@ servers:
   - 1:
       id: 1
       addr: "localhost"
-      port: "8080"
+      port: "5000"
   - 2:
       id: 2
       addr: "localhost"
-      port: "8081"
+      port: "5001"
   - 3:
       id: 3
       addr: "localhost"
-      port: "8082"
+      port: "5002"
   - 4:
       id: 4
       addr: "localhost"
-      port: "8083"
-  # - 5:
-  #     id: 5
-  #     addr: "localhost"
-  #     port: "8084"
-  # - 6:
-  #     id: 6
-  #     addr: "localhost"
-  #     port: "8085"
-  # - 7:
-  #     id: 7
-  #     addr: "localhost"
-  #     port: "8086"
+      port: "5003"
 clients:
   - 1:
       id: 1
