@@ -134,7 +134,7 @@ services:
     environment:
       - ID=7
       - SERVER=1
-      - CONF=${CONF:}
+      - CONF=${CONF}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
