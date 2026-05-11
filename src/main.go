@@ -13,7 +13,9 @@ import (
 	"time"
 
 	bench "github.com/Mekruba/gorums-benchmark/benchmark"
+	paxosataServer "github.com/Mekruba/gorums-benchmark/paxos.ata/server"
 	pbftGorumsNew "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
+	simplexGorumsNew "github.com/Mekruba/gorums-benchmark/simplex.gorums/server"
 	"github.com/joho/godotenv"
 )
 
@@ -180,9 +182,6 @@ func main() {
 	}
 
 	if *runSrv {
-		if srvID > len(servers) {
-			return
-		}
 		runServer(benchType, srvID, servers, *withLogger, *memProfile, *local)
 	} else {
 		runBenchmark(benchType, clients, *throughput, *numClients, *clientBasePort, *steps, *runs, *dur, *killPrimary, *local, servers, *memProfile, *withLogger, runType)
@@ -205,18 +204,22 @@ func runBenchmark(name string, clients ServerEntry, throughput, numClients, clie
 		logger := slog.New(handler)
 		options = append(options, bench.WithLogger(logger))
 	}
-	var srvAddresses []string
-	if !local {
-		options = append(options, bench.RunExternal())
-		if srvAddrs == nil {
-			fmt.Fprintln(os.Stderr, "Error: srvAddrs cannot be nil when not running locally")
-			os.Exit(1)
-		}
-		srvAddresses = make([]string, len(srvAddrs)+1)
+	// Build the server address slice from config in both local and non-local
+	// modes so RunBenchmark uses the configured cluster size instead of the
+	// default threeServers stub.
+	if srvAddrs == nil && !local {
+		fmt.Fprintln(os.Stderr, "Error: srvAddrs cannot be nil when not running locally")
+		os.Exit(1)
+	}
+	if len(srvAddrs) > 0 {
+		srvAddresses := make([]string, len(srvAddrs)+1)
 		for _, srv := range srvAddrs {
 			srvAddresses[srv.ID] = fmt.Sprintf("%s:%s", srv.Addr, srv.Port)
 		}
 		options = append(options, bench.WithSrvAddrs(srvAddresses))
+	}
+	if !local {
+		options = append(options, bench.RunExternal())
 	}
 	if numClients > 0 {
 		options = append(options, bench.NumClients(numClients))
@@ -249,6 +252,7 @@ func runBenchmark(name string, clients ServerEntry, throughput, numClients, clie
 		}
 		options = append(options, bench.WithClients(clientsMap))
 	}
+	// For simplex in local mode, srvAddrs are already set from the config (same as other benchmarks).
 	bench.RunBenchmark(name, options...)
 }
 
@@ -284,6 +288,15 @@ func runServer(benchType string, id int, srvAddrs map[int]Server, withLogger, me
 		pbftGorumsNew.InitLogger(uint32(id), withLogger)
 
 		srv = pbftGorumsNew.New(uint32(id), srvAddresses, false)
+	case bench.SimplexGorums:
+		simplexGorumsNew.InitKeys(len(srvAddrs))
+		srv = simplexGorumsNew.New(uint32(id), srvAddresses[id], srvAddresses)
+	case bench.PaxosATA:
+		addrs := make([]string, len(srvAddrs)+1)
+		for _, s := range srvAddrs {
+			addrs[s.ID] = fmt.Sprintf("%s:%s", s.Addr, s.Port)
+		}
+		srv = paxosataServer.New(srvAddresses[id], addrs)
 	default:
 		fmt.Fprintf(os.Stderr, "Error: no server implementation for benchmark type %q\n", benchType)
 		os.Exit(1)

@@ -48,6 +48,10 @@ func (b *PbftGorumsNewBenchmark) Init(opts RunOptions) {
 // CreateServer is called by the benchmark framework only in local mode
 // (opts.local == true). It starts a server for the given address.
 func (b *PbftGorumsNewBenchmark) CreateServer(addr string, srvAddrs []string) (*pbftserver.Server, func(), error) {
+	noop := func() {}
+	if addr == "" {
+		return nil, noop, nil
+	}
 	nodes := srvAddrsToNodes(srvAddrs)
 	var id uint32
 	for _, n := range nodes {
@@ -57,11 +61,11 @@ func (b *PbftGorumsNewBenchmark) CreateServer(addr string, srvAddrs []string) (*
 		}
 	}
 	if id == 0 {
-		return nil, nil, fmt.Errorf("pbftnew: no node found for addr %s in srvAddrs", addr)
+		return nil, noop, fmt.Errorf("pbftnew: no node found for addr %s in srvAddrs", addr)
 	}
 	srv, err := pbftserver.StartServer(id, nodes)
 	if err != nil {
-		return nil, nil, err
+		return nil, noop, err
 	}
 	return srv, func() { srv.Stop() }, nil
 }
