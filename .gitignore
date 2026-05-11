@@ -7,11 +7,14 @@ src/ui/node_modules/
 #csv
 #csv/
 /csv
+logs/
 src/csv/*
 /src/benchmarks/csv
 *.json
 src/pbft.gorums.new/node-*.log  
+src/bft-smart.gorums/node-*.log  
 src/pbft.gorums.new/pbft
+src/bft-smart.gorums/bftsmart
 
 # Logs
 

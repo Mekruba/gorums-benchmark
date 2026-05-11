@@ -8,7 +8,7 @@ services:
     environment:
       - ID=1
       - SERVER=1
-      - CONF=${CONF:-local}
+      - CONF=${CONF}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
@@ -29,7 +29,7 @@ services:
     environment:
       - ID=2
       - SERVER=1
-      - CONF=${CONF:-local}
+      - CONF=${CONF}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
@@ -50,7 +50,7 @@ services:
     environment:
       - ID=3
       - SERVER=1
-      - CONF=${CONF:-local}
+      - CONF=${CONF}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
@@ -71,7 +71,7 @@ services:
     environment:
       - ID=4
       - SERVER=1
-      - CONF=${CONF:-local}
+      - CONF=${CONF}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
@@ -92,7 +92,7 @@ services:
     environment:
       - ID=5
       - SERVER=1
-      - CONF=${CONF:-local}
+      - CONF=${CONF}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
@@ -113,7 +113,7 @@ services:
     environment:
       - ID=6
       - SERVER=1
-      - CONF=${CONF:-local}
+      - CONF=${CONF}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
@@ -134,7 +134,7 @@ services:
     environment:
       - ID=7
       - SERVER=1
-      - CONF=${CONF:-local}
+      - CONF=${CONF}
       - BENCH=${BENCH}
       - LOG=${LOG:-0}
     volumes:
@@ -154,28 +154,29 @@ services:
     network_mode: "host"
     environment:
       - SERVER=0
-      - CONF=${CONF:-local}
+      - CONF=${CONF}
       - BENCH=${BENCH}
       - THROUGHPUT=${THROUGHPUT}
       - STEPS=${STEPS}
       - RUNS=${RUNS}
       - DUR=${DUR}
-      - LOG=${LOG:-0}
+      - LOG=${LOG}
+      - KILLPRIMARY=${KILLPRIMARY}
     volumes:
       - ./logs:/app/logs
       - ./csv:/app/src/csv
-    depends_on:
-      srv1:
-        condition: service_healthy
-      srv2:
-        condition: service_healthy
-      srv3:
-        condition: service_healthy
-      srv4:
-        condition: service_healthy
-      srv5:
-        condition: service_healthy
-      srv6:
-        condition: service_healthy
-      srv7:
-        condition: service_healthy
+    # depends_on:
+    #   srv1:
+    #     condition: service_healthy
+    #   srv2:
+    #     condition: service_healthy
+    #   srv3:
+    #     condition: service_healthy
+    #   srv4:
+    #     condition: service_healthy
+      # srv5:
+      #   condition: service_healthy
+      # srv6:
+      #   condition: service_healthy
+      # srv7:
+      #   condition: service_healthy

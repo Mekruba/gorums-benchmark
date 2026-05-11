@@ -135,6 +135,7 @@ type RunOptions struct {
 	logger              *slog.Logger
 	clients             map[int]string
 	runType             RunType
+	killPrimaryAfter    time.Duration
 }
 
 func RunExternal() RunOption {
@@ -213,6 +214,12 @@ func Steps(steps int) RunOption {
 func Runs(runs int) RunOption {
 	return func(o *RunOptions) {
 		o.runs = runs
+	}
+}
+
+func KillPrimaryAfter(d time.Duration) RunOption {
+	return func(o *RunOptions) {
+		o.killPrimaryAfter = d
 	}
 }
 

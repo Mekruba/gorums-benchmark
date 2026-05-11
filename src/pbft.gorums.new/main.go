@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 
 	"github.com/Mekruba/gorums-benchmark/pbft.gorums.new/client"
+	"github.com/Mekruba/gorums-benchmark/pbft.gorums.new/latency"
 	"github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
 )
 
@@ -17,10 +19,16 @@ var nodes = []server.NodeInfo{
 	{ID: 4, Addr: "localhost:8083"},
 }
 
+var standbys = []server.NodeInfo{
+	{ID: 5, Addr: "localhost:8084"},
+	// {ID: 6, Addr: "localhost:8085"},
+}
+
 func main() {
 	serverCmd := flag.NewFlagSet("server", flag.ExitOnError)
-	serverID := serverCmd.Uint("id", 0, "Server node ID (1-4)")
+	serverID := serverCmd.Uint("id", 0, "Server node ID (1-7)")
 	serverVerbose := serverCmd.Bool("verbose", false, "Enable debug logging")
+	serverStandby := serverCmd.Bool("standby", false, "Start as standby replica")
 
 	// benchCmd := flag.NewFlagSet("benchmark", flag.ExitOnError)
 	// benchMode := benchCmd.String("mode", "latency", "Benchmark mode: latency or throughput")
@@ -42,14 +50,37 @@ func main() {
 			os.Exit(1)
 		}
 		id := uint32(*serverID)
-		if !validNodeID(id) {
-			fmt.Fprintf(os.Stderr, "Error: invalid node ID %d\n", id)
-			os.Exit(1)
+		if *serverStandby {
+			if !validStandbyID(id) {
+				fmt.Fprintf(os.Stderr, "Error: node ID %d is not a standby\n", id)
+				os.Exit(1)
+			}
+			allNodes := append(slices.Clone(nodes), standbys...)
+			server.RunServer(id, allNodes, *serverVerbose, true)
+		} else {
+			if !validNodeID(id) {
+				fmt.Fprintf(os.Stderr, "Error: invalid node ID %d\n", id)
+				os.Exit(1)
+			}
+			server.RunServer(id, nodes, *serverVerbose, false)
 		}
-		server.RunServer(id, nodes, *serverVerbose)
 
 	case "client":
-		client.RunClient(nodes)
+		allNodes := append(slices.Clone(nodes), standbys...)
+		client.RunClient(allNodes)
+
+	case "latency":
+		ids := make([]uint32, len(nodes))
+		for i, n := range nodes {
+			ids[i] = n.ID
+		}
+		m := latency.MatrixFromIDs(ids)
+		fmt.Println("=== Full cluster ===")
+		m.Print()
+
+		best := m.BestSubsetMatrix(4)
+		fmt.Println("\n=== Best 4-node subset ===")
+		best.Print()
 
 	default:
 		printUsage()
@@ -66,9 +97,17 @@ func validNodeID(id uint32) bool {
 	return false
 }
 
+func validStandbyID(id uint32) bool {
+	for _, n := range standbys {
+		if n.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  pbft server --id <1-4> [--verbose]")
 	fmt.Println("  pbft client")
-	fmt.Println("  pbft benchmark --mode <latency|throughput> --n <requests> [--steps N]")
 }
