@@ -51,9 +51,9 @@ func NewClient(nodes []server.NodeInfo) (*Client, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	c := &Client{allCfg: cfg, activeCfg: reachable(cfg), cancelWatch: cancel}
-	go c.watch(ctx)
+	// go c.watch(ctx)
 	return c, nil
 }
 
