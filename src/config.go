@@ -73,6 +73,7 @@ var mapping mappingType = map[int]string{
 	6: bench.PBFTGorumsNew,
 	7: bench.PaxosATA,
 	8: bench.SimplexGorums,
+	9: bench.BFTSmartGorums,
 }
 
 func (m mappingType) String() string {

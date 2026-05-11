@@ -1,0 +1,342 @@
+edition = "2024";
+package bftsmart;
+option go_package = "proto/bftsmart";
+option features.field_presence = IMPLICIT;
+import "google/protobuf/empty.proto";
+import "gorums.proto";
+
+// 
+// BFT-SMART service definition
+//
+// Based on: "State Machine Replication for the Masses with BFT-SMART"
+//           (Bessani, Sousa, Alchieri — DSN'14)
+//
+// Key differences from PBFT:
+//   1. Modular consensus: PROPOSE → WRITE → ACCEPT  (not PrePrepare/Prepare/Commit)
+//   2. Leader batches requests before proposing (batch consensus)
+//   3. Synchronization phase (STOP/SYNC) replaces PBFT view-change
+//   4. Reconfiguration via gorums' native Config.Add/Remove/Watch —
+//      no custom reconfiguration RPC needed at the proto level
+//   5. Collaborative state transfer
+//   6. Non-leader replicas forward client requests to the leader
+//   7. Unordered (read-only) requests bypass consensus entirely
+// 
+
+service BFTSmart {
+
+  //  Client-facing RPCs 
+
+  // Client sends ordered request to all replicas via quorum call.
+  // Each replica blocks until the batch containing this request is decided,
+  // then replies. Client accepts f+1 matching replies.
+  rpc ClientRequest(Request) returns (Reply) {
+    option (gorums.quorumcall) = true;
+  }
+
+  // Client sends unordered (read-only) request directly to all replicas.
+  // Replicas execute immediately without consensus — no batching, no ordering.
+  // Client needs 2f+1 matching replies for linearizability.
+  // (§II-C1: "Unordered requests … are directly delivered to the service")
+  rpc UnorderedRequest(Request) returns (Reply) {
+    option (gorums.quorumcall) = true;
+  }
+
+  //  Consensus protocol (Mod-SMaRt, §II-C1) 
+  //
+  // Three-phase leader-driven consensus, one instance per batch:
+  //   1. Leader → all:  PROPOSE  (contains the batch of client requests)
+  //   2. All ↔ all:     WRITE    (hash of the batch — first vote)
+  //   3. All ↔ all:     ACCEPT   (hash of the batch — confirm decision)
+  //
+  // PROPOSE carries the full batch; WRITE and ACCEPT carry only the digest.
+  // This is the key efficiency win — O(n²) messages carry only hashes.
+
+  // Leader multicasts a proposed batch to all replicas.
+  rpc Propose(ProposeMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+
+  // Each replica broadcasts a WRITE vote after validating the proposal.
+  rpc Write(WriteMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+
+  // Each replica broadcasts an ACCEPT vote once it has a WRITE quorum.
+  rpc Accept(AcceptMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+
+  //  Request forwarding 
+
+  // Non-leader replicas forward client requests to the current leader
+  // so the leader can include them in the next batch.
+  // (§III: "The first time [the request timer] expires …
+  //  it causes this request to be forwarded to the current known leader")
+  rpc ForwardRequest(ForwardedRequest) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
+  //  Synchronization phase (leader change, §II-C1) 
+  //
+  // Triggered when the request timer fires a second time for the same
+  // request, indicating the leader is suspected faulty. Replicas stop
+  // the current consensus instance and elect a new leader via round-robin.
+  //
+  // This replaces PBFT's VIEW-CHANGE / NEW-VIEW with a simpler protocol:
+  //   1. Replica suspects leader → broadcasts STOP (carries pending requests)
+  //   2. New leader collects 2f+1 STOPs → broadcasts SYNC
+  //   3. Replicas validate SYNC and enter the new regency (view)
+
+  // Replica broadcasts STOP when it suspects the leader.
+  rpc Stop(StopMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+
+  // New leader broadcasts SYNC after collecting 2f+1 STOPs.
+  rpc Sync(SyncMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+
+  //  Checkpoint / garbage collection 
+
+  // Replica multicasts checkpoint after executing a batch at a checkpoint
+  // boundary. Once 2f+1 matching checkpoints arrive the checkpoint is
+  // stable and garbage collection runs.
+  rpc Checkpoint(CheckpointMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+
+  //  State transfer (§II-C2) 
+  //
+  // A recovering/joining replica pulls state from the cluster.
+  // The response includes the application state snapshot and checkpoint proof.
+  // Collaborative transfer (multiple replicas each sending a piece) can be
+  // built on top using part_index/total_parts.
+
+  rpc StateTransfer(StateTransferRequest) returns (StateTransferResponse) {
+    option (gorums.quorumcall) = true;
+  }
+
+  //  Reconfiguration notification 
+  //
+  // Gorums handles the actual membership changes natively:
+  //   - Configuration.Add / Remove / Watch manage the node set
+  //   - System.Config() / WaitForConfig() track peer connectivity
+  //   - inboundManager detects connect/disconnect automatically
+  //
+  // This RPC is only a protocol-level notification: after a join/leave is
+  // decided through consensus, the leader multicasts a ViewUpdate so all
+  // replicas apply the membership change at the same logical point.
+  // The actual connection management is handled by gorums underneath.
+
+  rpc ViewUpdate(ViewUpdateMsg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+
+  //  Operational RPCs
+
+  rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option (gorums.quorumcall) = true;
+  }
+
+  rpc Benchmark(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+
+  rpc Kill(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+}
+
+// Enums
+
+enum Operation {
+  READ  = 0;
+  WRITE = 1;
+  RECONFIG = 2;
+}
+
+// Client<-> Replica messages
+
+// Request from client.
+// Matches PBFT <REQUEST, o, t, c> but adds payload for the actual command.
+// §VI-A: commands are byte arrays (not serialized objects) to avoid
+// serialization overhead on the critical path.
+message Request {
+  Operation operation = 1; // o: operation to execute
+  int64     timestamp = 2; // t: timestamp / monotonic counter for exactly-once
+  uint32    client_id = 3; // c: client identifier
+  bytes     payload   = 4; // serialized command (byte array — §VI-A)
+  bytes     signature = 5; // Ed25519 signature over (operation+timestamp+client_id+payload_hash)
+}
+
+// Reply to client.
+// <REPLY, v, t, c, i, r>
+message Reply {
+  uint32 view       = 1; // v: current view / regency number
+  int64  timestamp  = 2; // t: timestamp from request
+  uint32 client_id  = 3; // c: client identifier
+  uint32 replica_id = 4; // i: replica number
+  bytes  result     = 5; // r: result of executing the operation (byte array)
+  bytes  signature  = 6; // Ed25519 signature over (view+timestamp+replica_id+result_hash)
+}
+
+// Consensus messages (Mod-SMaRt, §II-C1)
+//
+// Each consensus instance decides one batch. consensus_id increments
+// monotonically (analogous to PBFT sequence number, but per-batch).
+//
+// Key difference from PBFT: PROPOSE carries the full batch of requests.
+// WRITE and ACCEPT carry only the batch_digest (SHA-256 of concatenated
+// serialized requests). This means O(n²) WRITE+ACCEPT messages are small.
+
+// PROPOSE: leader → all replicas (analogous to PRE-PREPARE)
+// Contains the full batch of client requests.
+message ProposeMsg {
+  uint64         consensus_id = 1; // consensus instance number
+  uint32         view         = 2; // current view / regency
+  uint32         leader_id    = 3; // proposing leader's replica ID
+  repeated Request batch       = 4; // client requests in this batch
+  bytes           batch_digest = 5; // SHA-256 over deterministic encoding of the batch
+  bytes          signature    = 6; // Ed25519 over (consensus_id + view + batch_digest)
+}
+
+// WRITE: all ↔ all (first all-to-all step, analogous to PREPARE)
+// Replicas echo the batch digest to vote on the proposed value.
+// Only carries the hash — not the full batch.
+message WriteMsg {
+  uint64 consensus_id = 1; // consensus instance number
+  uint32 view         = 2; // current view / regency
+  uint32 replica_id   = 3; // sender
+  bytes  batch_digest = 4; // SHA-256 of the proposed batch
+  bytes  signature    = 5; // Ed25519 over (consensus_id + view + batch_digest)
+}
+
+// ACCEPT: all ↔ all (second all-to-all step, analogous to COMMIT)
+// Sent after collecting 2f+1 matching WRITEs for the same digest.
+message AcceptMsg {
+  uint64 consensus_id = 1; // consensus instance number
+  uint32 view         = 2; // current view / regency
+  uint32 replica_id   = 3; // sender
+  bytes  batch_digest = 4; // SHA-256 of the proposed batch
+  bytes  signature    = 5; // Ed25519 over (consensus_id + view + batch_digest)
+}
+
+// Request forwarding
+
+// Non-leader replicas forward client requests to the leader for batching.
+// The original client signature is preserved so the leader can verify it.
+message ForwardedRequest {
+  uint32  forwarder_id = 1; // replica that is forwarding
+  Request request      = 2; // original client request (client signature intact)
+  bytes   signature    = 3; // Ed25519 from forwarder over request digest
+}
+
+// Synchronization phase (leader change)
+//
+// BFT-SMART replaces PBFT's VIEW-CHANGE / NEW-VIEW with STOP / SYNC:
+//
+//   1. Replica suspects leader → broadcasts STOP
+//      - Carries pending requests that the leader failed to order
+//   2. New leader collects 2f+1 STOPs → broadcasts SYNC
+//      - Contains union of pending requests + the new consensus starting point
+//   3. All replicas validate SYNC and enter the new regency
+//
+// This is simpler than PBFT because:
+//   - No PreparedSet / proof-of-prepared-requests needed
+//   - The new leader simply re-proposes the unordered requests
+//   - Leader election is still deterministic round-robin: leader = view % n
+
+// STOP: replica → all (leader suspected)
+message StopMsg {
+  uint32         new_view          = 1; // proposed next regency / view
+  uint32         replica_id        = 2; // sender
+  uint64         last_consensus_id = 3; // last consensus instance this replica decided
+  repeated Request pending_requests  = 4; // requests not yet ordered
+  bytes          signature         = 5; // Ed25519 over (new_view + last_consensus_id)
+}
+
+// SYNC: new leader → all (after collecting 2f+1 STOPs)
+message SyncMsg {
+  uint32           new_view          = 1; // the new regency / view
+  uint32           leader_id         = 2; // new leader (sender)
+  repeated StopMsg stop_proofs       = 3; // 2f+1 STOP messages as proof
+  repeated Request pending_requests  = 4; // union of pending requests from all STOPs
+  uint64           next_consensus_id = 5; // consensus instance to resume from
+  bytes            signature         = 6; // Ed25519 over (new_view + next_consensus_id)
+}
+
+// Checkpoint (same concept as PBFT §4.3, reused from your implementation)
+
+// <CHECKPOINT, n, d, i>
+message CheckpointMsg {
+  uint64 consensus_id = 1; // last decided consensus instance at checkpoint
+  uint32 replica_id   = 2; // sender
+  bytes  state_digest = 3; // SHA-256 of the application state
+  bytes  signature    = 4; // Ed25519 over (consensus_id + state_digest)
+}
+
+// State transfer (§II-C2)
+//
+// Collaborative: a recovering/joining replica contacts the cluster.
+// In the simple case one replica sends the full state (part_index=0,
+// total_parts=1). For large states, multiple replicas can each send
+// a different part — gorums' quorum call collects enough responses.
+
+message StateTransferRequest {
+  uint32 replica_id        = 1; // requesting (recovering) replica
+  uint64 last_consensus_id = 2; // last consensus the requester knows about
+  bytes  signature         = 3; // Ed25519 over (replica_id + last_consensus_id)
+}
+
+message StateTransferResponse {
+  uint64                 last_consensus_id = 1; // last decided consensus on responder
+  uint64                 checkpoint_id     = 2; // consensus_id of last stable checkpoint
+  uint32                 view              = 3; // current view / regency
+  bytes                  state_snapshot    = 4; // serialized application state (or part)
+  repeated CheckpointMsg checkpoint_proof  = 5; // 2f+1 checkpoint messages as proof
+  uint32                 replica_id        = 6; // responding replica
+  uint32                 part_index        = 7; // which part (0 = full state)
+  uint32                 total_parts       = 8; // total number of parts (1 = full)
+  bytes                  signature         = 9; // Ed25519 over (last_consensus_id + view + replica_id)
+}
+
+// View update (reconfiguration notification)
+//
+// Gorums does the heavy lifting for reconfiguration:
+//   - gorums.Configuration.Add/Remove mutate the node set
+//   - gorums.Configuration.Watch detects membership changes
+//   - gorums.System.Config()/WaitForConfig() track peer connectivity
+//   - inboundManager automatically handles connect/disconnect
+//
+// What we need at the protocol level is a way to ensure all replicas
+// apply membership changes at the same logical point (same consensus_id).
+// The leader submits a ViewUpdate through consensus so it is totally
+// ordered with respect to client requests. On delivery, each replica
+// calls cfg.Add() or cfg.Remove() on its outbound configuration.
+
+enum MembershipAction {
+  JOIN  = 0;
+  LEAVE = 1;
+}
+
+message ViewUpdateMsg {
+  uint32           new_view     = 1; // view number after this change
+  uint32           leader_id    = 2; // leader that ordered this change
+  MembershipAction action       = 3; // join or leave
+  uint32           target_id    = 4; // replica being added or removed
+  string           target_addr  = 5; // address of joining replica (empty for leave)
+  uint64           consensus_id = 6; // consensus instance where this was decided
+  bytes            signature    = 7; // Ed25519 over (new_view + target_id + consensus_id)
+}
+
+// Decision proof (internal, used in log for state transfer / view change)
+//
+// Records the full proof that a consensus instance was decided.
+// Analogous to PBFT's PreparedSet but for the three-phase protocol.
+
+message DecisionProof {
+  ProposeMsg         propose = 1; // the proposal (with full batch)
+  repeated WriteMsg  writes  = 2; // 2f+1 matching WRITE messages
+  repeated AcceptMsg accepts = 3; // 2f+1 matching ACCEPT messages
+}

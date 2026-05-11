@@ -13,6 +13,7 @@ import (
 	"time"
 
 	bench "github.com/Mekruba/gorums-benchmark/benchmark"
+	bftsmartGorums "github.com/Mekruba/gorums-benchmark/bft-smart.gorums/server"
 	paxosataServer "github.com/Mekruba/gorums-benchmark/paxos.ata/server"
 	pbftGorumsNew "github.com/Mekruba/gorums-benchmark/pbft.gorums.new/server"
 	simplexGorumsNew "github.com/Mekruba/gorums-benchmark/simplex.gorums/server"
@@ -288,6 +289,8 @@ func runServer(benchType string, id int, srvAddrs map[int]Server, withLogger, me
 		pbftGorumsNew.InitLogger(uint32(id), withLogger)
 
 		srv = pbftGorumsNew.New(uint32(id), srvAddresses, false)
+	case bench.BFTSmartGorums:
+		srv = bftsmartGorums.New(uint32(id), srvAddresses, false)
 	case bench.SimplexGorums:
 		simplexGorumsNew.InitKeys(len(srvAddrs))
 		srv = simplexGorumsNew.New(uint32(id), srvAddresses[id], srvAddresses)
