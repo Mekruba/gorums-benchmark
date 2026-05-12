@@ -150,8 +150,8 @@ func (c *CheckpointState) recordVote(replicaID uint32, digest []byte, msg *pb.Ch
 }
 
 const (
-	CheckpointInterval = 100000
-	WaterMarkWindow    = 200000
+	CheckpointInterval = 1000
+	WaterMarkWindow    = 2000
 )
 
 // MessageLog is the central state store for in-flight consensus entries and checkpoints.

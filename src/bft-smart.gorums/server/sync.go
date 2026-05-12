@@ -237,6 +237,7 @@ func (s *BFTSmartServer) Sync(ctx gorums.ServerCtx, msg *pb.SyncMsg) {
 }
 
 func (s *BFTSmartServer) enterNewView(newView uint32, nextCID uint64, pending []*pb.Request) {
+	s.cancelAllReqTimers()
 	s.mu.Lock()
 	oldView := s.view
 	s.view = newView

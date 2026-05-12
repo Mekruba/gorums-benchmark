@@ -10,7 +10,9 @@ import (
 	"github.com/Mekruba/gorums-benchmark/bft-smart.gorums/server"
 	"github.com/relab/gorums"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -78,8 +80,14 @@ func (c *Client) watch(ctx context.Context) {
 func reachable(cfg gorums.Configuration) gorums.Configuration {
 	out := make(gorums.Configuration, 0, cfg.Size())
 	for _, n := range cfg.Nodes() {
-		if n.LastErr() == nil {
+		err := n.LastErr()
+		if err == nil {
 			out = append(out, n)
+			continue
+		}
+		code := status.Code(err)
+		if code != codes.Unavailable && code != codes.Internal {
+			out = append(out, n) // transient error, keep the node
 		}
 	}
 	return out
