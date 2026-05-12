@@ -30,6 +30,7 @@ type ClientResult struct {
 	ReqDistribution []uint64 // shows how many request in transit per unit of time
 	BucketSize      int      // number of microseconds
 	Durations       []time.Duration
+	    Starts    []time.Time  // ← add this
 }
 
 type Result struct {
@@ -289,7 +290,7 @@ func runThroughputVsLatencyBenchmark(benchmark benchStruct, benchmarkState initi
 		}
 		fmt.Println("took:", time.Since(start))
 		throughputVsLatency = append(throughputVsLatency, []string{strconv.Itoa(int(clientResult.Throughput)), strconv.Itoa(int(clientResult.LatencyAvg.Milliseconds())), strconv.Itoa(int(clientResult.LatencyMedian.Milliseconds()))})
-		err = WriteDurations(fmt.Sprintf("%s.T%v.R%v.durations", name, target, runNumber), clientResult.Durations)
+		err = WriteDurations(fmt.Sprintf("%s.T%v.R%v.durations", name, target, runNumber), clientResult.Durations, clientResult.Starts)
 		if err != nil {
 			panic(err)
 		}
@@ -457,6 +458,7 @@ func runBenchmark[S, C any](opts benchmarkOption, benchmark Benchmark[S, C]) (Cl
 			dur := res.end.Sub(res.start)
 			avgDur += dur
 			durations[i] = dur
+			clientResult.Starts = append(clientResult.Starts, res.start)  // ← add this
 		}
 		// wait a short time to make the servers finish up before sending a "purge state msg" to them
 		time.Sleep(2 * time.Second)
