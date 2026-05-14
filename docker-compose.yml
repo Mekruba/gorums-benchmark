@@ -164,7 +164,7 @@ services:
       - KILLPRIMARY=${KILLPRIMARY}
     volumes:
       - ./logs:/app/logs
-      - ./csv:/app/src/csv
+      - ./csv:/app/src/csv:z
     # depends_on:
     #   srv1:
     #     condition: service_healthy
