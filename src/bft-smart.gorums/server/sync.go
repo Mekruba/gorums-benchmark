@@ -148,25 +148,31 @@ func (s *BFTSmartServer) Stop(ctx gorums.ServerCtx, msg *pb.StopMsg) {
 
 	s.syncMu.Lock()
 	if s.stopMsgs == nil {
-		s.stopMsgs = make(map[uint32]*pb.StopMsg)
+		s.stopMsgs = make(map[uint32]map[uint32]*pb.StopMsg)
 	}
-	s.stopMsgs[from] = msg
-	count := len(s.stopMsgs)
+	if s.stopMsgs[nv] == nil {
+		s.stopMsgs[nv] = make(map[uint32]*pb.StopMsg)
+	}
+	s.stopMsgs[nv][from] = msg
+	count := len(s.stopMsgs[nv])
 	s.syncMu.Unlock()
 
-	slog.Info("STOP counted", "node", s.id, "new_view", nv,
-		"from", from, "count", count, "needed", 2*s.f()+1)
-
-	if count >= 2*s.f() {
+	if count >= 2*s.f()+1 {
 		s.sendSync(nv)
 	}
 }
 
 func (s *BFTSmartServer) sendSync(newView uint32) {
 	s.syncMu.Lock()
-	msgs := make([]*pb.StopMsg, 0, len(s.stopMsgs))
-	for _, m := range s.stopMsgs {
+	msgs := make([]*pb.StopMsg, 0, len(s.stopMsgs[newView]))
+	for _, m := range s.stopMsgs[newView] {
 		msgs = append(msgs, m)
+	}
+	// clean up stale views while holding the lock
+	for v := range s.stopMsgs {
+		if v <= newView {
+			delete(s.stopMsgs, v)
+		}
 	}
 	s.syncMu.Unlock()
 
@@ -216,20 +222,23 @@ func (s *BFTSmartServer) Sync(ctx gorums.ServerCtx, msg *pb.SyncMsg) {
 	from := msg.GetLeaderId()
 
 	if !verifyMsg(from, syncDigest(nv, msg.GetNextConsensusId()), msg.GetSignature()) {
-		slog.Warn("SYNC sig invalid", "node", s.id, "from", from, "new_view", nv)
 		return
 	}
 	if from != s.newLeader(nv) {
-		slog.Warn("SYNC from wrong leader", "node", s.id,
-			"from", from, "expected", s.newLeader(nv), "new_view", nv)
+		return
+	}
+	if from == s.id {
 		return
 	}
 
-	// new leader already entered new view in sendSync — skip self delivery
-	if from == s.id {
-		slog.Debug("SYNC self delivery ignored", "node", s.id, "new_view", nv)
+	s.mu.Lock()
+	if nv <= s.view {
+		s.mu.Unlock()
+		slog.Debug("SYNC stale, ignoring", "node", s.id,
+			"current_view", s.view, "sync_view", nv)
 		return
 	}
+	s.mu.Unlock()
 
 	slog.Info("SYNC accepted", "node", s.id, "new_view", nv,
 		"next_cid", msg.GetNextConsensusId())
@@ -239,6 +248,12 @@ func (s *BFTSmartServer) Sync(ctx gorums.ServerCtx, msg *pb.SyncMsg) {
 func (s *BFTSmartServer) enterNewView(newView uint32, nextCID uint64, pending []*pb.Request) {
 	s.cancelAllReqTimers()
 	s.mu.Lock()
+	if newView <= s.view {
+		s.mu.Unlock()
+		slog.Warn("enterNewView: rejected stale view",
+			"node", s.id, "current", s.view, "attempted", newView)
+		return
+	}
 	oldView := s.view
 	s.view = newView
 	s.leader = (s.id == s.newLeader(newView))
@@ -246,7 +261,7 @@ func (s *BFTSmartServer) enterNewView(newView uint32, nextCID uint64, pending []
 	s.mu.Unlock()
 
 	s.syncMu.Lock()
-	s.stopMsgs = make(map[uint32]*pb.StopMsg)
+	s.stopMsgs = make(map[uint32]map[uint32]*pb.StopMsg)
 	s.syncMu.Unlock()
 
 	for {

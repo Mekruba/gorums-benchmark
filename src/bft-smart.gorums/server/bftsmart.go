@@ -42,7 +42,7 @@ type BFTSmartServer struct {
 	// sync phase state (used by sync.go)
 	syncMu       sync.Mutex
 	syncTimer    *time.Timer
-	stopMsgs     map[uint32]*pb.StopMsg
+	stopMsgs     map[uint32]map[uint32]*pb.StopMsg
 	inViewChange bool
 
 	// request timers (used by sync.go)
