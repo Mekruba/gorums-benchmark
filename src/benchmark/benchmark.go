@@ -294,7 +294,7 @@ func runThroughputVsLatencyBenchmark(benchmark benchStruct, benchmarkState initi
 		}
 		fmt.Println("took:", time.Since(start))
 		throughputVsLatency = append(throughputVsLatency, []string{strconv.Itoa(int(clientResult.Throughput)), strconv.Itoa(int(clientResult.LatencyAvg.Milliseconds())), strconv.Itoa(int(clientResult.LatencyMedian.Milliseconds()))})
-		err = WriteDurations(fmt.Sprintf("%s.T%v.R%v.durations", name, target, runNumber), clientResult.Durations, clientResult.Starts)
+		err = WriteDurations(fmt.Sprintf("%s.T%v.R%v.durations", name, target, runNumber), clientResult.Durations)
 		if err != nil {
 			panic(err)
 		}
