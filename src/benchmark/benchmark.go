@@ -473,7 +473,7 @@ func runBenchmark[S, C any](opts benchmarkOption, benchmark Benchmark[S, C]) (Cl
 			avgDur += dur
 			durations[i] = dur
 			// Collect time-series data: elapsed ms from collection start and latency, in arrival order.
-			timedStarts = append(timedStarts, res.start.Sub(collectionStart).Milliseconds())
+			timedStarts = append(timedStarts, res.end.Sub(collectionStart).Milliseconds())
 			timedDurs = append(timedDurs, dur)
 		}
 		// wait a short time to make the servers finish up before sending a "purge state msg" to them
